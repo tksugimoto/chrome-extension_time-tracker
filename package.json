@@ -4,6 +4,7 @@
     "lint": "eslint --ext .js,.html ."
   },
   "dependencies": {
-    "eslint": "^8.55.0"
+    "eslint": "^8.55.0",
+    "eslint-plugin-react-hooks": "^4.6.0"
   }
 }
