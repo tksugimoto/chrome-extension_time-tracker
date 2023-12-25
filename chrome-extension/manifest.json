@@ -5,7 +5,11 @@
 	"action": {
 		"default_popup": "/main.html"
 	},
+	"background": {
+		"service_worker": "background.js"
+	},
 	"permissions": [
+		"contextMenus",
 		"storage"
 	]
 }
