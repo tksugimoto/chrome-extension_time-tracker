@@ -400,14 +400,12 @@ const App = () => {
 		createElement('ul', {}, todos.map((todo, i) => {
 			const isCurrent = (todo.type === currentRecord?.type) && (todo.title === currentRecord?.title);
 			const hasUrlMemo = !!todo.memo?.match(/^http[^ ]+$/);
-			const backgroundColor = isCurrent ? 'yellow' : undefined;
+			const className = isCurrent ? 'current' : undefined;
 			return createElement(
 				'li',
 				{
 					key: i,
-					style: {
-						backgroundColor,
-					},
+					className,
 				},
 				isTodoEditMode && createElement(
 					'button',
