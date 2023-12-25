@@ -4,9 +4,6 @@ module.exports = {
 		browser: true,
 		es6: true,
 	},
-	plugins: [
-		'html',
-	],
 	parserOptions: {
 		ecmaVersion: 2020,
 	},

@@ -1,7 +1,7 @@
 {
   "private": true,
   "scripts": {
-    "lint": "eslint --ext .js,.html ."
+    "lint": "eslint --ext .js ."
   },
   "dependencies": {
     "eslint": "^8.55.0",
