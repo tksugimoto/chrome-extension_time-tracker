@@ -337,6 +337,7 @@ const App = () => {
 				'li',
 				{
 					key: type.name,
+					className: type.name === currentRecord?.type ? 'current' : undefined,
 				},
 				createElement(
 					'button',
