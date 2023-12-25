@@ -337,6 +337,7 @@ const App = () => {
 				'li',
 				{
 					key: type.name,
+					className: type.name === currentRecord?.type ? 'current' : undefined,
 				},
 				createElement(
 					'button',
@@ -398,16 +399,14 @@ const App = () => {
 			'編集モード',
 		),
 		createElement('ul', {}, todos.map((todo, i) => {
-			const isCurrent = (todo.type === currentRecord?.type) && (todo.title === currentRecord?.title);
+			const isCurrent = (todo.type === currentRecord?.type) && ((todo.title || '') === (currentRecord?.title || '')) && ((todo.memo || '') === (currentRecord?.memo || ''));
 			const hasUrlMemo = !!todo.memo?.match(/^http[^ ]+$/);
-			const backgroundColor = isCurrent ? 'yellow' : undefined;
+			const className = isCurrent ? 'current' : undefined;
 			return createElement(
 				'li',
 				{
 					key: i,
-					style: {
-						backgroundColor,
-					},
+					className,
 				},
 				isTodoEditMode && createElement(
 					'button',
