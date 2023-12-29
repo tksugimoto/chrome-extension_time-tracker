@@ -343,6 +343,7 @@ const App = () => {
 	const [isTodoEditMode, setTodoEditMode] = useState(false);
 	const [isDetailVisible, setDetailVisible] = useState(false);
 	const [hideNoTitleOrMemo, setHideNoTitleOrMemo] = useState(true);
+	const [isAggregationVisible, setAggregationVisible] = useState(false);
 
 	const todoWorkTimes = allList.reduce((acc, record) => {
 		// todoのkeyが2つ(type,title)なのでMapは使えずloopで該当のindexを探すしかない
@@ -653,6 +654,14 @@ const App = () => {
 			},
 			'タイトル・メモが存在しないものは省略',
 		),
+		createElement('br'),
+		createElement(
+			Checkbox, {
+				checked: isAggregationVisible,
+				onChange: setAggregationVisible,
+			},
+			'同一タイトルで集約',
+		),
 		createElement('ul', {}, [...grouped.entries()].map(([type, records]) => {
 			const workTimeSeconds = records.map(record => record.workTimeSeconds).reduce((a, b) => a + b, 0);
 			return {
@@ -673,7 +682,42 @@ const App = () => {
 				createElement('br'),
 				// TODO: 日付別に集計結果を表示する
 				`[${Formats.percent(workTimeSeconds / totalWorkTimeSeconds)}] ${Formats.seconds(workTimeSeconds)}`,
-				isDetailVisible && createElement('ol', {}, records.map(record => {
+				isAggregationVisible && createElement(
+					'ul',
+					{},
+					// @ts-expect-error TS2339: Property 'groupBy' does not exist on type 'MapConstructor'.
+					// もうすぐ型定義が追加される https://github.com/microsoft/TypeScript/pull/56805
+					[...Map.groupBy(records, ({title}) => title || '').entries()].map(([title, sameTitleRecords]) => {
+						const sameTitleWorkTimeSeconds = sameTitleRecords.map(record => record.workTimeSeconds).reduce((a, b) => a + b, 0);
+						return {
+							title,
+							sameTitleRecords,
+							sameTitleWorkTimeSeconds,
+						};
+					}).sort((a, b) => {
+						// 降順
+						return b.sameTitleWorkTimeSeconds - a.sameTitleWorkTimeSeconds;
+					}).map(({title, sameTitleRecords, sameTitleWorkTimeSeconds}) => {
+						return createElement(
+							'li',
+							{
+								key: title,
+							},
+							`[${Formats.seconds(sameTitleWorkTimeSeconds)}] ${title}`,
+							isDetailVisible && createElement('ol', {}, sameTitleRecords.map(record => {
+								if (hideNoTitleOrMemo && !(record.title || record.memo)) return null;
+								return createElement(
+									'li',
+									{
+										key: record.start,
+									},
+									createElement(RecordView, {types, record, save, finishAndAddRecord, isEditable: false}),
+								);
+							})),
+						);
+					}),
+				),
+				!isAggregationVisible && isDetailVisible && createElement('ol', {}, records.map(record => {
 					if (hideNoTitleOrMemo && !(record.title || record.memo)) return null;
 					return createElement(
 						'li',
