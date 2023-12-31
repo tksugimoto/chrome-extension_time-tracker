@@ -3,6 +3,9 @@
 const CONTEXT_MENU_KEY_ID_OPEN = 'open';
 
 chrome.runtime.onInstalled.addListener(() => {
+	chrome.tabs.create({
+		url: chrome.runtime.getManifest().action.default_popup,
+	});
 	chrome.contextMenus.create({
 		title: '新規タブで開く',
 		contexts: ['action'],
