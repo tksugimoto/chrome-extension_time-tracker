@@ -6,32 +6,32 @@ const openNewTab = () => {
 	});
 };
 
-const CONTEXT_MENU_KEY_ID_OPEN = 'open';
-const CONTEXT_MENU_KEY_ID_RELOAD = 'reload';
+const ContextMenus = [{
+	id: 'open',
+	title: '新規タブで開く',
+	onClicked: openNewTab,
+}, {
+	id: 'reload',
+	title: 'リロード',
+	onClicked: () => chrome.runtime.reload(),
+}];
 
-chrome.runtime.onInstalled.addListener(async () => {
+chrome.runtime.onInstalled.addListener(() => {
 	openNewTab();
-	await chrome.contextMenus.create({
-		title: '新規タブで開く',
-		contexts: ['action'],
-		id: CONTEXT_MENU_KEY_ID_OPEN,
-	});
-	await chrome.contextMenus.create({
-		title: 'リロード',
-		contexts: ['action'],
-		id: CONTEXT_MENU_KEY_ID_RELOAD,
-	});
+	ContextMenus.reduce((promise, contextMenu) => {
+		return promise.then(() => {
+			return chrome.contextMenus.create({
+				title: contextMenu.title,
+				contexts: ['action'],
+				id: contextMenu.id,
+			});
+		});
+	}, Promise.resolve());
 });
 
 chrome.contextMenus.onClicked.addListener(info => {
-	if (info.menuItemId === CONTEXT_MENU_KEY_ID_OPEN) {
-		openNewTab();
-		return;
-	}
-	if (info.menuItemId === CONTEXT_MENU_KEY_ID_RELOAD) {
-		chrome.runtime.reload();
-		return;
-	}
+	const contextMenu = ContextMenus.find(({id}) => id === info.menuItemId);
+	if (contextMenu) contextMenu.onClicked();
 });
 
 chrome.commands.onCommand.addListener(command => {
