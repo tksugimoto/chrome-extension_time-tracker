@@ -1,11 +1,15 @@
 /* global chrome */
 
-const CONTEXT_MENU_KEY_ID_OPEN = 'open';
-
-chrome.runtime.onInstalled.addListener(() => {
+const openNewTab = () => {
 	chrome.tabs.create({
 		url: chrome.runtime.getManifest().action.default_popup,
 	});
+};
+
+const CONTEXT_MENU_KEY_ID_OPEN = 'open';
+
+chrome.runtime.onInstalled.addListener(() => {
+	openNewTab();
 	chrome.contextMenus.create({
 		title: '新規タブで開く',
 		contexts: ['action'],
@@ -15,9 +19,7 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.contextMenus.onClicked.addListener(info => {
 	if (info.menuItemId === CONTEXT_MENU_KEY_ID_OPEN) {
-		chrome.tabs.create({
-			url: chrome.runtime.getManifest().action.default_popup,
-		});
+		openNewTab();
 	}
 });
 
