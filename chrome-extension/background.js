@@ -7,19 +7,30 @@ const openNewTab = () => {
 };
 
 const CONTEXT_MENU_KEY_ID_OPEN = 'open';
+const CONTEXT_MENU_KEY_ID_RELOAD = 'reload';
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async () => {
 	openNewTab();
-	chrome.contextMenus.create({
+	await chrome.contextMenus.create({
 		title: '新規タブで開く',
 		contexts: ['action'],
 		id: CONTEXT_MENU_KEY_ID_OPEN,
+	});
+	await chrome.contextMenus.create({
+		title: 'リロード',
+		contexts: ['action'],
+		id: CONTEXT_MENU_KEY_ID_RELOAD,
 	});
 });
 
 chrome.contextMenus.onClicked.addListener(info => {
 	if (info.menuItemId === CONTEXT_MENU_KEY_ID_OPEN) {
 		openNewTab();
+		return;
+	}
+	if (info.menuItemId === CONTEXT_MENU_KEY_ID_RELOAD) {
+		chrome.runtime.reload();
+		return;
 	}
 });
 
