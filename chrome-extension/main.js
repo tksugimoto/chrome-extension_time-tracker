@@ -187,7 +187,7 @@ const RecordView = ({
 			'input',
 			{
 				value: record.title || '',
-				placeholder: 'title',
+				placeholder: 'タイトル',
 				size: titleSize,
 				onChange: e => {
 					// FIXME: mutableをやめる
@@ -200,7 +200,7 @@ const RecordView = ({
 			'input',
 			{
 				value: record.memo || '',
-				placeholder: 'memo',
+				placeholder: 'メモ',
 				onChange: e => {
 					// FIXME: mutableをやめる
 					record.setMemo(e.target.value);
@@ -350,7 +350,7 @@ const App = () => {
 		React.Fragment,
 		{},
 		createElement('h1', {}, 'Time Tracker'),
-		createElement('h2', {}, 'Type'),
+		createElement('h2', {}, '分類'),
 		createElement('ul', {}, types.map((type, i) => {
 			return createElement(
 				'li',
@@ -401,15 +401,15 @@ const App = () => {
 				{
 					required: true,
 					value: newType,
-					placeholder: 'type',
+					placeholder: '分類',
 					onChange: e => {
 						setNewType(e.target.value);
 					},
 				},
 			),
-			createElement('button', {}, 'Type追加'),
+			createElement('button', {}, '分類追加'),
 		),
-		createElement('h2', {}, 'Todo'),
+		createElement('h2', {}, 'ToDo'),
 		createElement(
 			Checkbox, {
 				checked: isTodoEditMode,
@@ -474,7 +474,7 @@ const App = () => {
 					'input',
 					{
 						value: todo.title,
-						placeholder: 'title',
+						placeholder: 'タイトル',
 						size: titleSize,
 						onChange: e => {
 							// FIXME: mutableをやめる
@@ -533,14 +533,14 @@ const App = () => {
 					return createElement('option', {
 						key: i,
 						value: type,
-					}, type || '【Type】');
+					}, type || '【分類】');
 				}),
 			),
 			createElement(
 				'input',
 				{
 					value: newTodoTitle,
-					placeholder: 'title',
+					placeholder: 'タイトル',
 					size: titleSize,
 					onChange: e => {
 						setNewTodoTitle(e.target.value);
@@ -551,13 +551,13 @@ const App = () => {
 				'input',
 				{
 					value: newTodoMemo,
-					placeholder: 'memo',
+					placeholder: 'メモ',
 					onChange: e => {
 						setNewTodoMemo(e.target.value);
 					},
 				},
 			),
-			createElement('button', {}, 'TODO追加'),
+			createElement('button', {}, 'ToDo追加'),
 		),
 		createElement('h2', {}, '現在'),
 		currentRecord ? createElement(RecordView, {types, record: currentRecord, save}) : '未開始',
@@ -594,7 +594,7 @@ const App = () => {
 				checked: isDetailVisible,
 				onChange: setDetailVisible,
 			},
-			'詳細を表示する ※ title, memoが存在しないものは省略',
+			'詳細を表示する ※ タイトル・メモが存在しないものは省略',
 		),
 		createElement('ul', {}, [...grouped.entries()].map(([type, records]) => {
 			const workTimeSeconds = records.map(record => record.workTimeSeconds).reduce((a, b) => a + b, 0);
