@@ -409,7 +409,7 @@ const App = () => {
 			),
 			createElement('button', {}, '分類追加'),
 		),
-		createElement('h2', {}, 'Todo'),
+		createElement('h2', {}, 'ToDo'),
 		createElement(
 			Checkbox, {
 				checked: isTodoEditMode,
@@ -557,7 +557,7 @@ const App = () => {
 					},
 				},
 			),
-			createElement('button', {}, 'TODO追加'),
+			createElement('button', {}, 'ToDo追加'),
 		),
 		createElement('h2', {}, '現在'),
 		currentRecord ? createElement(RecordView, {types, record: currentRecord, save}) : '未開始',
