@@ -362,7 +362,7 @@ const App = () => {
 					'button',
 					{
 						onClick: () => {
-							if (window.confirm('削除しますか？')) {
+							if (window.confirm(`「${type.name}」を削除しますか？`)) {
 								// FIXME: mutableをやめる
 								// types.toSpliced が使える
 								types.splice(i, 1);
@@ -431,7 +431,9 @@ const App = () => {
 					'button',
 					{
 						onClick: () => {
-							if (window.confirm('削除しますか？')) {
+							const desc = todo.title || todo.memo || '-';
+							const message = `「${todo.type}(${desc})」を削除しますか？`;
+							if (window.confirm(message)) {
 								// FIXME: mutableをやめる
 								// todos.toSpliced が使える
 								todos.splice(i, 1);
