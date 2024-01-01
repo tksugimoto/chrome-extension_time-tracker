@@ -362,7 +362,7 @@ const App = () => {
 					'button',
 					{
 						onClick: () => {
-							if (window.confirm('削除しますか？')) {
+							if (window.confirm(`「${type.name}」を削除しますか？`)) {
 								// FIXME: mutableをやめる
 								// types.toSpliced が使える
 								types.splice(i, 1);
