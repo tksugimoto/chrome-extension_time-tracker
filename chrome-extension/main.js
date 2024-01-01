@@ -104,7 +104,8 @@ const saveToStorage = (key, value) => {
 /**
  * @template T
  * @param {string} storageKey
- * @param {function(any): T=} transform
+ * @param {Object} options
+ * @param {function(any): T=} options.transform
  * @returns {{
  * 	allList: T[]
  * 	refresh: function(): void
@@ -112,7 +113,9 @@ const saveToStorage = (key, value) => {
  * 	save: function(): void
  * }}
  */
-const useStorageList = (storageKey, transform) => {
+const useStorageList = (storageKey, {
+	transform,
+} = {}) => {
 	const [allList, setList] = useState([]);
 	useEffect(() => {
 		loadFromStorage(storageKey, list => {
@@ -299,7 +302,9 @@ const App = () => {
 		refresh,
 		add,
 		save,
-	} = useStorageList('record', TimeRecord.load);
+	} = useStorageList('record', {
+		transform: TimeRecord.load,
+	});
 
 	const [isTodoEditMode, setTodoEditMode] = useState(false);
 	const [isDetailVisible, setDetailVisible] = useState(false);
