@@ -431,7 +431,9 @@ const App = () => {
 					'button',
 					{
 						onClick: () => {
-							if (window.confirm('削除しますか？')) {
+							const desc = todo.title || todo.memo || '-';
+							const message = `「${todo.type}(${desc})」を削除しますか？`;
+							if (window.confirm(message)) {
 								// FIXME: mutableをやめる
 								// todos.toSpliced が使える
 								todos.splice(i, 1);
