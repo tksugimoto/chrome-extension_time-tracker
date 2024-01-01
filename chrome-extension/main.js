@@ -106,6 +106,7 @@ const saveToStorage = (key, value) => {
  * @param {string} storageKey
  * @param {Object} options
  * @param {function(any): T=} options.transform
+ * @param {Object[]} options.defaultValue
  * @returns {{
  * 	allList: T[]
  * 	refresh: function(): void
@@ -115,13 +116,14 @@ const saveToStorage = (key, value) => {
  */
 const useStorageList = (storageKey, {
 	transform,
+	defaultValue,
 } = {}) => {
 	const [allList, setList] = useState([]);
 	useEffect(() => {
 		loadFromStorage(storageKey, list => {
-			setList((list ?? []).map(transform ?? (v => v)));
+			setList((list ?? defaultValue ?? []).map(transform ?? (v => v)));
 		});
-	}, [storageKey, transform]);
+	}, [storageKey, defaultValue, transform]);
 	const refresh = useCallback(() => setList(list => [...list]), []);
 	const add = useCallback(value => {
 		setList(list => {
@@ -280,6 +282,16 @@ const typesToNamesWithCurrent = (types, current) => {
 	return names.includes(current) ? names : [current, ...names];
 };
 
+const defaultTypes = [{
+	name: 'メールチェック',
+}, {
+	name: 'ミーティング',
+}, {
+	name: 'レビュー',
+}, {
+	name: '中断',
+}];
+
 const App = () => {
 	const {
 		allList: todos,
@@ -294,7 +306,9 @@ const App = () => {
 		allList: types,
 		add: addType,
 		save: saveType,
-	} = useStorageList('type');
+	} = useStorageList('type', {
+		defaultValue: defaultTypes,
+	});
 	const [newType, setNewType] = useState('');
 
 	const {
