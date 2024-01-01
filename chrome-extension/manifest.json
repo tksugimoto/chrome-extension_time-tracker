@@ -5,7 +5,17 @@
 	"action": {
 		"default_popup": "/main.html"
 	},
+	"background": {
+		"service_worker": "background.js"
+	},
+	"commands": {
+		"open_or_focus": {
+			"description": "開く（すでに開いている場合はフォーカスする）"
+		}
+	},
 	"permissions": [
+		"tabs",
+		"contextMenus",
 		"storage"
 	]
 }
