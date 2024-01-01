@@ -350,7 +350,7 @@ const App = () => {
 		React.Fragment,
 		{},
 		createElement('h1', {}, 'Time Tracker'),
-		createElement('h2', {}, 'Type'),
+		createElement('h2', {}, '分類'),
 		createElement('ul', {}, types.map((type, i) => {
 			return createElement(
 				'li',
@@ -401,13 +401,13 @@ const App = () => {
 				{
 					required: true,
 					value: newType,
-					placeholder: 'type',
+					placeholder: '分類',
 					onChange: e => {
 						setNewType(e.target.value);
 					},
 				},
 			),
-			createElement('button', {}, 'Type追加'),
+			createElement('button', {}, '分類追加'),
 		),
 		createElement('h2', {}, 'Todo'),
 		createElement(
@@ -533,7 +533,7 @@ const App = () => {
 					return createElement('option', {
 						key: i,
 						value: type,
-					}, type || '【Type】');
+					}, type || '【分類】');
 				}),
 			),
 			createElement(
