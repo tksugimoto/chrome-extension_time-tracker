@@ -187,7 +187,7 @@ const RecordView = ({
 			'input',
 			{
 				value: record.title || '',
-				placeholder: 'title',
+				placeholder: 'タイトル',
 				size: titleSize,
 				onChange: e => {
 					// FIXME: mutableをやめる
@@ -200,7 +200,7 @@ const RecordView = ({
 			'input',
 			{
 				value: record.memo || '',
-				placeholder: 'memo',
+				placeholder: 'メモ',
 				onChange: e => {
 					// FIXME: mutableをやめる
 					record.setMemo(e.target.value);
@@ -474,7 +474,7 @@ const App = () => {
 					'input',
 					{
 						value: todo.title,
-						placeholder: 'title',
+						placeholder: 'タイトル',
 						size: titleSize,
 						onChange: e => {
 							// FIXME: mutableをやめる
@@ -540,7 +540,7 @@ const App = () => {
 				'input',
 				{
 					value: newTodoTitle,
-					placeholder: 'title',
+					placeholder: 'タイトル',
 					size: titleSize,
 					onChange: e => {
 						setNewTodoTitle(e.target.value);
@@ -551,7 +551,7 @@ const App = () => {
 				'input',
 				{
 					value: newTodoMemo,
-					placeholder: 'memo',
+					placeholder: 'メモ',
 					onChange: e => {
 						setNewTodoMemo(e.target.value);
 					},
@@ -594,7 +594,7 @@ const App = () => {
 				checked: isDetailVisible,
 				onChange: setDetailVisible,
 			},
-			'詳細を表示する ※ title, memoが存在しないものは省略',
+			'詳細を表示する ※ タイトル・メモが存在しないものは省略',
 		),
 		createElement('ul', {}, [...grouped.entries()].map(([type, records]) => {
 			const workTimeSeconds = records.map(record => record.workTimeSeconds).reduce((a, b) => a + b, 0);
