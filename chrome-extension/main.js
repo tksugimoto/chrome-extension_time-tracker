@@ -236,6 +236,7 @@ const Checkbox = ({
 	children,
 	checked,
 	onChange,
+	disabled = false,
 }) => {
 	return createElement(
 		'label',
@@ -253,6 +254,7 @@ const Checkbox = ({
 				onChange: e => {
 					onChange(e.target.checked);
 				},
+				disabled,
 				style: {
 					verticalAlign: 'middle',
 					cursor: 'pointer',
@@ -322,6 +324,7 @@ const App = () => {
 
 	const [isTodoEditMode, setTodoEditMode] = useState(false);
 	const [isDetailVisible, setDetailVisible] = useState(false);
+	const [hideNoTitleOrMemo, setHideNoTitleOrMemo] = useState(true);
 
 	// TODO: 日付関連もう少し整理する
 	const list = allList.filter(record => record.isDateOf(startOfDate()));
@@ -596,7 +599,15 @@ const App = () => {
 				checked: isDetailVisible,
 				onChange: setDetailVisible,
 			},
-			'詳細を表示する ※ タイトル・メモが存在しないものは省略',
+			'詳細を表示する',
+		),
+		createElement(
+			Checkbox, {
+				checked: hideNoTitleOrMemo,
+				onChange: setHideNoTitleOrMemo,
+				disabled: !isDetailVisible,
+			},
+			'タイトル・メモが存在しないものは省略',
 		),
 		createElement('ul', {}, [...grouped.entries()].map(([type, records]) => {
 			const workTimeSeconds = records.map(record => record.workTimeSeconds).reduce((a, b) => a + b, 0);
@@ -619,7 +630,7 @@ const App = () => {
 				// TODO: 日付別に集計結果を表示する
 				`[${Formats.percent(workTimeSeconds / totalWorkTimeSeconds)}] ${Formats.seconds(workTimeSeconds)}`,
 				isDetailVisible && createElement('ol', {}, records.map(record => {
-					if (!(record.title || record.memo)) return null;
+					if (hideNoTitleOrMemo && !(record.title || record.memo)) return null;
 					return createElement(
 						'li',
 						{
