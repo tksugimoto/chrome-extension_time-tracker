@@ -556,7 +556,7 @@ const App = () => {
 				'input',
 				{
 					value: newTodoMemo,
-					placeholder: 'メモ',
+					placeholder: 'メモ / URL',
 					onChange: e => {
 						setNewTodoMemo(e.target.value);
 					},
