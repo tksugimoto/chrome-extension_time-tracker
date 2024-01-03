@@ -533,6 +533,7 @@ const App = () => {
 				) : hasUrlMemo ? '' : todo.memo,
 			);
 		})),
+		'※ ToDoごとの経過時間の集計には分類・タイトルのみを使用し、メモ / URLの違いを無視する',
 		isTodoEditMode && createElement(
 			'form',
 			{
