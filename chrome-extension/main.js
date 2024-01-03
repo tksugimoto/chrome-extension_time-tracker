@@ -501,7 +501,7 @@ const App = () => {
 					'input',
 					{
 						value: todo.memo,
-						placeholder: 'memo / URL',
+						placeholder: 'メモ / URL',
 						onChange: e => {
 							// FIXME: mutableをやめる
 							todo.memo = e.target.value;
@@ -556,7 +556,7 @@ const App = () => {
 				'input',
 				{
 					value: newTodoMemo,
-					placeholder: 'メモ',
+					placeholder: 'メモ / URL',
 					onChange: e => {
 						setNewTodoMemo(e.target.value);
 					},
