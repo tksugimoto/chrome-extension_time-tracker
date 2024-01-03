@@ -326,6 +326,27 @@ const App = () => {
 	const [isDetailVisible, setDetailVisible] = useState(false);
 	const [hideNoTitleOrMemo, setHideNoTitleOrMemo] = useState(true);
 
+	const todoWorkTimes = allList.reduce((acc, record) => {
+		// todoのkeyが2つ(type,title)なのでMapは使えずloopで該当のindexを探すしかない
+		const matched = acc.find(({todo}) => {
+			return (
+				todo.type === record.type
+			) && (
+				// memoの違いは無視する
+				(todo.title || '') === (record.title || '')
+			);
+		});
+		if (matched) {
+			matched.total += record.workTimeSeconds;
+		}
+		return acc;
+	}, todos.map(todo => {
+		return {
+			todo,
+			total: 0,
+		};
+	}));
+
 	// TODO: 日付関連もう少し整理する
 	const list = allList.filter(record => record.isDateOf(startOfDate()));
 
@@ -458,6 +479,7 @@ const App = () => {
 					},
 					'開始',
 				),
+				` [${Formats.seconds(todoWorkTimes[i].total)}] `,
 				isTodoEditMode ? createElement(
 					'select',
 					{
@@ -511,10 +533,12 @@ const App = () => {
 				) : hasUrlMemo ? '' : todo.memo,
 			);
 		})),
+		'※ ToDoごとの経過時間の集計には分類・タイトルのみを使用し、メモ / URLの違いを無視する',
 		isTodoEditMode && createElement(
 			'form',
 			{
 				onSubmit: e => {
+					// TODO: 重複チェック(type,titleで一意)
 					addTodo({
 						type: newTodoType,
 						title: newTodoTitle,
