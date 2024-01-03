@@ -343,7 +343,7 @@ const App = () => {
 	const [isTodoEditMode, setTodoEditMode] = useState(false);
 	const [isDetailVisible, setDetailVisible] = useState(false);
 	const [hideNoTitleOrMemo, setHideNoTitleOrMemo] = useState(true);
-	const [isAggregationVisible, setAggregationVisible] = useState(false);
+	const [isAggregationVisible, setAggregationVisible] = useState(true);
 
 	const todoWorkTimes = allList.reduce((acc, record) => {
 		// todoのkeyが2つ(type,title)なのでMapは使えずloopで該当のindexを探すしかない
@@ -371,7 +371,11 @@ const App = () => {
 
 	const currentRecord = list[list.length - 1];
 
-	const [targetDate, setTargetDate] = useState(startOfDate());
+	const [targetDate, setTargetDate] = useState(() => {
+		const d = startOfDate();
+		d.setFullYear(2023);
+		return d;
+	});
 	// @ts-expect-error TS2339: Property 'groupBy' does not exist on type 'MapConstructor'.
 	// もうすぐ型定義が追加される https://github.com/microsoft/TypeScript/pull/56805
 	const grouped = Map.groupBy(allList.filter(record => !is勤務外(record.type) && record.isDateOf(targetDate)), ({type}) => type);
