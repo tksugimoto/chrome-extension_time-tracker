@@ -538,6 +538,7 @@ const App = () => {
 			'form',
 			{
 				onSubmit: e => {
+					// TODO: 重複チェック(type,titleで一意)
 					addTodo({
 						type: newTodoType,
 						title: newTodoTitle,
