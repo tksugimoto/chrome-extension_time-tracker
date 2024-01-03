@@ -8,6 +8,41 @@ const {
 	useEffect,
 } = React;
 
+const domParser = new DOMParser();
+
+/**
+ *
+ * @param {DataTransfer | null} clipboardData
+ * @returns {Promise<{
+ *   text: string,
+ *   url?: string,
+ * }> | null}
+ */
+const readClipboardData = clipboardData => {
+	if (!clipboardData) return null;
+	const items = Array.from(clipboardData.items);
+	const plain = items.find(item => item.type === 'text/plain');
+	const html = items.find(item => item.type === 'text/html');
+	if (plain && html) {
+		return Promise.all([
+			new Promise(r => html.getAsString(r)),
+			new Promise(r => plain.getAsString(r)),
+		]).then(([htmlString, plainString]) => {
+			const doc = domParser.parseFromString(htmlString, 'text/html');
+			const links = doc.querySelectorAll('a');
+			if (links.length === 1) {
+				const link = links[0];
+				const text = link.innerText;
+				const url = link.href;
+				return ({text, url});
+			} else {
+				return({text: plainString});
+			}
+		});
+	}
+	return null;
+};
+
 const startOfDate = (date = new Date()) => {
 	date.setHours(0);
 	date.setMinutes(0);
@@ -343,6 +378,28 @@ const App = () => {
 	const [isTodoEditMode, setTodoEditMode] = useState(false);
 	const [isDetailVisible, setDetailVisible] = useState(false);
 	const [hideNoTitleOrMemo, setHideNoTitleOrMemo] = useState(true);
+
+	// TODO: この機能を有効にするかどうかの設定を追加
+	useEffect(() => {
+		// クリップボードにリンクが1つ存在する場合にToDo登録
+		// TODO: htmlがクリップボードにない場合も対象にする(↑のコメントも修正する)
+		window.addEventListener('paste', event => {
+			// 入力欄にフォーカスがあり貼り付けた場合は対象外とする
+			// ※ 個別の入力欄に貼り付けた際の入力は直感的な動作にできないため妥協
+			if (event.target?.['tagName'] === 'INPUT') return; // TODO: 入力欄判定の改善
+			const result = readClipboardData(event.clipboardData);
+			if (!result) return;
+			result.then(({text, url}) => {
+				setTodoEditMode(true);
+				if (url) {
+					setNewTodoTitle(text);
+					setNewTodoMemo(url);
+				} else {
+					setNewTodoTitle(text);
+				}
+			});
+		});
+	}, []);
 
 	const todoWorkTimes = allList.reduce((acc, record) => {
 		// todoのkeyが2つ(type,title)なのでMapは使えずloopで該当のindexを探すしかない
