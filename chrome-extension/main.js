@@ -236,6 +236,7 @@ const Checkbox = ({
 	children,
 	checked,
 	onChange,
+	disabled = false,
 }) => {
 	return createElement(
 		'label',
@@ -253,6 +254,7 @@ const Checkbox = ({
 				onChange: e => {
 					onChange(e.target.checked);
 				},
+				disabled,
 				style: {
 					verticalAlign: 'middle',
 					cursor: 'pointer',
