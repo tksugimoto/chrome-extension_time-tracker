@@ -8,6 +8,39 @@ const {
 	useEffect,
 } = React;
 
+const domParser = new DOMParser();
+
+/**
+ *
+ * @param {DataTransfer} clipboardData
+ * @returns {Promise<{
+ *   text: string,
+ *   url?: string,
+ * }> | null}
+ */
+const readClipboardData = clipboardData => {
+	const items = Array.from(clipboardData.items);
+	const plain = items.find(item => item.type === 'text/plain');
+	if (!plain) return null;
+	const html = items.find(item => item.type === 'text/html');
+	return Promise.all([
+		html && new Promise(r => html.getAsString(r)),
+		new Promise(r => plain.getAsString(r)),
+	]).then(([htmlString, plainString]) => {
+		if (!htmlString) return({text: plainString});
+		const doc = domParser.parseFromString(htmlString, 'text/html');
+		const links = doc.querySelectorAll('a');
+		if (links.length === 1) {
+			const link = links[0];
+			const text = link.innerText;
+			const url = link.href;
+			return ({text, url});
+		} else {
+			return({text: plainString});
+		}
+	});
+};
+
 const startOfDate = (date = new Date()) => {
 	date.setHours(0);
 	date.setMinutes(0);
@@ -392,6 +425,26 @@ const App = () => {
 	const [isTodoEditMode, setTodoEditMode] = useState(false);
 	const [isDetailVisible, setDetailVisible] = useSetting('detail-visible', false);
 	const [hideNoTitleOrMemo, setHideNoTitleOrMemo] = useSetting('no-title_or_memo', true);
+
+	// TODO: この機能を有効にするかどうかの設定を追加
+	useEffect(() => {
+		// クリップボードの中身をToDo登録
+		window.addEventListener('paste', event => {
+			// 入力欄にフォーカスがあり貼り付けた場合は対象外とする
+			// ※ 個別の入力欄に貼り付けた際の入力は直感的な動作にできないため妥協
+			if (event.target?.['tagName'] === 'INPUT') return; // TODO: 入力欄判定の改善
+			if (!event.clipboardData) return;
+			readClipboardData(event.clipboardData)?.then(({text, url}) => {
+				setTodoEditMode(true);
+				if (url) {
+					setNewTodoTitle(text);
+					setNewTodoMemo(url);
+				} else {
+					setNewTodoTitle(text);
+				}
+			});
+		});
+	}, []);
 
 	const todoWorkTimes = allList.reduce((acc, record) => {
 		// todoのkeyが2つ(type,title)なのでMapは使えずloopで該当のindexを探すしかない
