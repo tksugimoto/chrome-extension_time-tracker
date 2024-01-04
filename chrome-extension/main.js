@@ -1,3 +1,4 @@
+// @ts-check
 /* global chrome */
 /* global React, ReactDOM */
 const {
