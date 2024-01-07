@@ -1,3 +1,4 @@
+// @ts-check
 /* global chrome */
 /* global React, ReactDOM */
 const {
@@ -106,7 +107,7 @@ const saveToStorage = (key, value) => {
  * @param {string} storageKey
  * @param {Object} options
  * @param {function(any): T=} options.transform
- * @param {Object[]} options.defaultValue
+ * @param {Object[]=} options.defaultValue
  * @returns {{
  * 	allList: T[]
  * 	refresh: function(): void
@@ -118,7 +119,11 @@ const useStorageList = (storageKey, {
 	transform,
 	defaultValue,
 } = {}) => {
-	const [allList, setList] = useState([]);
+	const [allList, setList] = useState(() => {
+		// 変数に入れないと any ではなく never 型となってしまい、 setList 部分で型エラーとなる問題対策
+		const empty = [];
+		return empty;
+	});
 	useEffect(() => {
 		loadFromStorage(storageKey, list => {
 			setList((list ?? defaultValue ?? []).map(transform ?? (v => v)));
@@ -150,7 +155,11 @@ const titleSize = 40;
 /**
  *
  * @param {Object} param0
+ * @param {{name: string}[]} param0.types
  * @param {TimeRecord} param0.record
+ * @param {function(): void} param0.save
+ * @param {function(TimeRecord): void=} param0.finishAndAddRecord
+ * @param {boolean=} param0.isEditable
  * @returns
  */
 const RecordView = ({
@@ -213,7 +222,7 @@ const RecordView = ({
 				'button',
 				{
 					onClick: () => {
-						finishAndAddRecord(record);
+						finishAndAddRecord?.(record);
 					},
 				},
 				'再開',
@@ -232,6 +241,15 @@ const RecordView = ({
 	);
 };
 
+/**
+ *
+ * @param {import("react").PropsWithChildren<{
+ * 	checked: boolean,
+ * 	onChange: function(boolean): void,
+ * 	disabled?: boolean
+ * }>} param0
+ * @returns
+ */
 const Checkbox = ({
 	children,
 	checked,
@@ -353,6 +371,8 @@ const App = () => {
 	const currentRecord = list[list.length - 1];
 
 	const [targetDate, setTargetDate] = useState(startOfDate());
+	// @ts-expect-error TS2339: Property 'groupBy' does not exist on type 'MapConstructor'.
+	// もうすぐ型定義が追加される https://github.com/microsoft/TypeScript/pull/56805
 	const grouped = Map.groupBy(allList.filter(record => !is勤務外(record.type) && record.isDateOf(targetDate)), ({type}) => type);
 	const totalWorkTimeSeconds = [...grouped.values()].flatMap(records => records.map(record => record.workTimeSeconds)).reduce((a, b) => a + b, 0);
 
@@ -669,5 +689,7 @@ const App = () => {
 };
 
 ReactDOM
+	// @ts-expect-error TS2339: Property 'createRoot' does not exist on type 'typeof import("$path_to/node_modules/@types/react-dom/index")'.
+	// なぜか ReactDOM.createRoot が存在しない
 	.createRoot(document.getElementById('app'))
 	.render(createElement(App));
