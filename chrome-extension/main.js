@@ -237,6 +237,15 @@ const RecordView = ({
 	);
 };
 
+/**
+ *
+ * @param {import("react").PropsWithChildren<{
+ * 	checked: boolean,
+ * 	onChange: function(boolean): void,
+ * 	disabled?: boolean
+ * }>} param0
+ * @returns
+ */
 const Checkbox = ({
 	children,
 	checked,
