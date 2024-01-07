@@ -5,6 +5,7 @@
   },
   "devDependencies": {
     "@types/chrome": "^0.0.256",
+    "@types/react": "^18.2.47",
     "eslint": "^8.56.0",
     "eslint-plugin-react": "^7.33.2",
     "eslint-plugin-react-hooks": "^4.6.0"
