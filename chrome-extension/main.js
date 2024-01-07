@@ -687,5 +687,7 @@ const App = () => {
 };
 
 ReactDOM
+	// @ts-expect-error TS2339: Property 'createRoot' does not exist on type 'typeof import("$path_to/node_modules/@types/react-dom/index")'.
+	// なぜか ReactDOM.createRoot が存在しない
 	.createRoot(document.getElementById('app'))
 	.render(createElement(App));
