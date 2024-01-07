@@ -119,7 +119,11 @@ const useStorageList = (storageKey, {
 	transform,
 	defaultValue,
 } = {}) => {
-	const [allList, setList] = useState([]);
+	const [allList, setList] = useState(() => {
+		// 変数に入れないと any ではなく never 型となってしまい、 setList 部分で型エラーとなる問題対策
+		const empty = [];
+		return empty;
+	});
 	useEffect(() => {
 		loadFromStorage(storageKey, list => {
 			setList((list ?? defaultValue ?? []).map(transform ?? (v => v)));
