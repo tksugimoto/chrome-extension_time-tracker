@@ -462,7 +462,7 @@ const App = () => {
 			'編集モード',
 		),
 		createElement('ul', {}, todos.map((todo, i) => {
-			const isCurrent = (todo.type === currentRecord?.type) && ((todo.title || '') === (currentRecord?.title || '')) && ((todo.memo || '') === (currentRecord?.memo || ''));
+			const isCurrent = (todo.type === currentRecord?.type) && ((todo.title || '') === (currentRecord?.title || ''));
 			const hasUrlMemo = !!todo.memo?.match(/^http[^ ]+$/);
 			const className = isCurrent ? 'current' : undefined;
 			return createElement(
