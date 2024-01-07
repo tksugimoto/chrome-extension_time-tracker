@@ -107,7 +107,7 @@ const saveToStorage = (key, value) => {
  * @param {string} storageKey
  * @param {Object} options
  * @param {function(any): T=} options.transform
- * @param {Object[]} options.defaultValue
+ * @param {Object[]=} options.defaultValue
  * @returns {{
  * 	allList: T[]
  * 	refresh: function(): void
