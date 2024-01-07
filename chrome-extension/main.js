@@ -69,13 +69,24 @@ const Formats = {
 	padStart0(num) {
 		return num.toString().padStart(2, '0');
 	},
+	/**
+	 *
+	 * @param {TemplateStringsArray} strings
+	 * @param  {...number} nums
+	 * @returns
+	 */
+	padStart0template(strings, ...nums) { // TODO: 関数名見直し
+		return nums.reduce((acc, num, i) => {
+			return `${acc}${this.padStart0(num)}${strings[i + 1]}`;
+		}, strings[0]);
+	},
 	seconds(time) {
 		const seconds = time % 60;
 		const minutes = Math.floor(time / 60) % 60;
 		const hours = Math.floor(time / 60 / 60);
-		if (hours) return `${hours}時間${this.padStart0(minutes)}分${this.padStart0(seconds)}秒`;
-		if (minutes) return `${this.padStart0(minutes)}分${this.padStart0(seconds)}秒`;
-		return `${this.padStart0(seconds)}秒`;
+		if (hours) return this.padStart0template`${hours}時間${minutes}分${seconds}秒`; // 時間部分も2桁表示になる
+		if (minutes) return this.padStart0template`${minutes}分${seconds}秒`;
+		return this.padStart0template`${seconds}秒`;
 	},
 	ISODateString(date) {
 		return new Date(date.getTime() - (date.getTimezoneOffset() * 60000 )).toISOString().replace(/T.*/, '');
