@@ -154,7 +154,7 @@ const titleSize = 40;
  * @param {{name: string}[]} param0.types
  * @param {TimeRecord} param0.record
  * @param {function(): void} param0.save
- * @param {function(TimeRecord): void} param0.finishAndAddRecord
+ * @param {function(TimeRecord): void=} param0.finishAndAddRecord
  * @param {boolean=} param0.isEditable
  * @returns
  */
@@ -218,7 +218,7 @@ const RecordView = ({
 				'button',
 				{
 					onClick: () => {
-						finishAndAddRecord(record);
+						finishAndAddRecord?.(record);
 					},
 				},
 				'再開',
