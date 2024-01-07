@@ -371,6 +371,8 @@ const App = () => {
 	const currentRecord = list[list.length - 1];
 
 	const [targetDate, setTargetDate] = useState(startOfDate());
+	// @ts-expect-error TS2339: Property 'groupBy' does not exist on type 'MapConstructor'.
+	// もうすぐ型定義が追加される https://github.com/microsoft/TypeScript/pull/56805
 	const grouped = Map.groupBy(allList.filter(record => !is勤務外(record.type) && record.isDateOf(targetDate)), ({type}) => type);
 	const totalWorkTimeSeconds = [...grouped.values()].flatMap(records => records.map(record => record.workTimeSeconds)).reduce((a, b) => a + b, 0);
 
