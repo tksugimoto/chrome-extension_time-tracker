@@ -12,7 +12,7 @@ const domParser = new DOMParser();
 
 /**
  *
- * @param {DataTransfer | null} clipboardData
+ * @param {DataTransfer} clipboardData
  * @returns {Promise<{
  *   text: string,
  *   url?: string,
@@ -387,6 +387,7 @@ const App = () => {
 			// 入力欄にフォーカスがあり貼り付けた場合は対象外とする
 			// ※ 個別の入力欄に貼り付けた際の入力は直感的な動作にできないため妥協
 			if (event.target?.['tagName'] === 'INPUT') return; // TODO: 入力欄判定の改善
+			if (!event.clipboardData) return;
 			const result = readClipboardData(event.clipboardData);
 			if (!result) return;
 			result.then(({text, url}) => {
