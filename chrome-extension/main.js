@@ -23,11 +23,12 @@ const readClipboardData = clipboardData => {
 	const items = Array.from(clipboardData.items);
 	const plain = items.find(item => item.type === 'text/plain');
 	const html = items.find(item => item.type === 'text/html');
-	if (plain && html) {
+	if (plain) {
 		return Promise.all([
-			new Promise(r => html.getAsString(r)),
+			html && new Promise(r => html.getAsString(r)),
 			new Promise(r => plain.getAsString(r)),
 		]).then(([htmlString, plainString]) => {
+			console.log({htmlString});
 			const doc = domParser.parseFromString(htmlString, 'text/html');
 			const links = doc.querySelectorAll('a');
 			if (links.length === 1) {
