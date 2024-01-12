@@ -16,8 +16,12 @@ const ContextMenus = [{
 	onClicked: () => chrome.runtime.reload(),
 }];
 
-chrome.runtime.onInstalled.addListener(() => {
-	openNewTab();
+chrome.runtime.onInstalled.addListener((details) => {
+	if ([
+		chrome.runtime.OnInstalledReason.INSTALL,
+		chrome.runtime.OnInstalledReason.UPDATE,
+	].includes(details.reason)) openNewTab();
+
 	ContextMenus.reduce((promise, contextMenu) => {
 		return promise.then(() => {
 			return chrome.contextMenus.create({
