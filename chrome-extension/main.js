@@ -173,7 +173,7 @@ const RecordView = ({
 	return createElement(
 		React.Fragment,
 		{},
-		`${new Date(record.start).toLocaleTimeString()}～${record.end ? new Date(record.end).toLocaleTimeString() : ''}`,
+		`${new Date(record.start).toLocaleString()}～${record.end ? new Date(record.end).toLocaleTimeString() : ''}`,
 		`(${Formats.seconds(record.workTimeSeconds)})`,
 		createElement(
 			'select',
