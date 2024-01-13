@@ -423,13 +423,14 @@ const App = () => {
 	});
 
 	const [isTodoEditMode, setTodoEditMode] = useState(false);
+	const [isInputToDoFromClipboardEnabled, setInputToDoFromClipboardEnabled] = useSetting('clipboard-to-todo', false);
 	const [isDetailVisible, setDetailVisible] = useSetting('detail-visible', false);
 	const [hideNoTitleOrMemo, setHideNoTitleOrMemo] = useSetting('no-title_or_memo', true);
 
-	// TODO: この機能を有効にするかどうかの設定を追加
 	useEffect(() => {
+		if (!isInputToDoFromClipboardEnabled) return;
 		// クリップボードの中身をToDo登録
-		window.addEventListener('paste', event => {
+		const listener = event => {
 			// 入力欄にフォーカスがあり貼り付けた場合は対象外とする
 			// ※ 個別の入力欄に貼り付けた際の入力は直感的な動作にできないため妥協
 			if (event.target?.['tagName'] === 'INPUT') return; // TODO: 入力欄判定の改善
@@ -443,8 +444,10 @@ const App = () => {
 					setNewTodoTitle(text);
 				}
 			});
-		});
-	}, []);
+		};
+		window.addEventListener('paste', listener);
+		return () => window.removeEventListener('paste', listener);
+	}, [isInputToDoFromClipboardEnabled]);
 
 	const todoWorkTimes = allList.reduce((acc, record) => {
 		// todoのkeyが2つ(type,title)なのでMapは使えずloopで該当のindexを探すしかない
@@ -562,6 +565,13 @@ const App = () => {
 				onChange: setTodoEditMode,
 			},
 			'編集モード',
+		),
+		createElement(
+			Checkbox, {
+				checked: isInputToDoFromClipboardEnabled,
+				onChange: setInputToDoFromClipboardEnabled,
+			},
+			'クリップボードを貼り付けでToDoを入力する',
 		),
 		createElement('ul', {}, todos.map((todo, i) => {
 			const isCurrent = (todo.type === currentRecord?.type) && ((todo.title || '') === (currentRecord?.title || ''));
