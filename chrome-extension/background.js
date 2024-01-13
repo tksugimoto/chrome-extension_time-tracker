@@ -24,10 +24,12 @@ chrome.runtime.onInstalled.addListener((details) => {
 
 	ContextMenus.reduce((promise, contextMenu) => {
 		return promise.then(() => {
-			return chrome.contextMenus.create({
-				title: contextMenu.title,
-				contexts: ['action'],
-				id: contextMenu.id,
+			return new Promise(resolve => {
+				chrome.contextMenus.create({
+					title: contextMenu.title,
+					contexts: ['action'],
+					id: contextMenu.id,
+				}, resolve);
 			});
 		});
 	}, Promise.resolve());
