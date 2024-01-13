@@ -80,6 +80,18 @@ const Formats = {
 	ISODateString(date) {
 		return new Date(date.getTime() - (date.getTimezoneOffset() * 60000 )).toISOString().replace(/T.*/, '');
 	},
+	/**
+	 * @param {number} timestampMs
+	 */
+	localeDateTimeString(timestampMs) {
+		return new Date(timestampMs).toLocaleString();
+	},
+	/**
+	 * @param {number} timestampMs
+	 */
+	localeTimeString(timestampMs) {
+		return new Date(timestampMs).toLocaleTimeString();
+	},
 };
 
 // TODO: types に組み込む
@@ -173,7 +185,7 @@ const RecordView = ({
 	return createElement(
 		React.Fragment,
 		{},
-		`${new Date(record.start).toLocaleString()}～${record.end ? new Date(record.end).toLocaleTimeString() : ''}`,
+		`${Formats.localeDateTimeString(record.start)}～${record.end ? Formats.localeTimeString(record.end) : ''}`,
 		`(${Formats.seconds(record.workTimeSeconds)})`,
 		createElement(
 			'select',
