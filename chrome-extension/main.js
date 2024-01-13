@@ -84,7 +84,14 @@ const Formats = {
 	 * @param {number} timestampMs
 	 */
 	localeDateTimeString(timestampMs) {
-		return new Date(timestampMs).toLocaleString();
+		return new Date(timestampMs).toLocaleString(undefined, {
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit',
+		});
 	},
 	/**
 	 * @param {number} timestampMs
