@@ -32,7 +32,7 @@ chrome.runtime.onInstalled.addListener((details) => {
 				}, resolve);
 			});
 		});
-	}, Promise.resolve());
+	}, new Promise(resolve => chrome.contextMenus.removeAll(resolve)));
 });
 
 chrome.contextMenus.onClicked.addListener(info => {
