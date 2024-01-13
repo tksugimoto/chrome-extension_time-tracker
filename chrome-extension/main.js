@@ -183,6 +183,7 @@ const titleSize = 40;
  * @param {function(): void} param0.save
  * @param {function(TimeRecord): void=} param0.finishAndAddRecord
  * @param {boolean=} param0.isEditable
+ * @param {boolean=} param0.hideDate
  * @returns
  */
 const RecordView = ({
@@ -191,12 +192,13 @@ const RecordView = ({
 	save,
 	finishAndAddRecord,
 	isEditable = true, // FIXME: 名前の適切化
+	hideDate = false,
 }) => {
 	// TODO: 縦位置を揃えたい
 	return createElement(
 		React.Fragment,
 		{},
-		`${Formats.localeDateTimeString(record.start)}～${record.end ? Formats.localeTimeString(record.end) : ''}`,
+		`${Formats[hideDate ? 'localeTimeString' : 'localeDateTimeString'](record.start)}～${record.end ? Formats.localeTimeString(record.end) : ''}`,
 		`(${Formats.seconds(record.workTimeSeconds)})`,
 		createElement(
 			'select',
@@ -632,7 +634,7 @@ const App = () => {
 			createElement('button', {}, 'ToDo追加'),
 		),
 		createElement('h2', {}, '現在'),
-		currentRecord ? createElement(RecordView, {types, record: currentRecord, save}) : '未開始',
+		currentRecord ? createElement(RecordView, {types, record: currentRecord, save, hideDate: true}) : '未開始',
 		createElement('h2', {}, '履歴'),
 		createElement('ol', {}, list.map((record) => {
 			return createElement(
@@ -640,7 +642,7 @@ const App = () => {
 				{
 					key: record.start,
 				},
-				createElement(RecordView, {types, record, save, finishAndAddRecord}),
+				createElement(RecordView, {types, record, save, finishAndAddRecord, hideDate: true}),
 			);
 		})),
 		createElement('h2', {}, '集計結果'),
