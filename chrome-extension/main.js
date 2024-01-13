@@ -80,6 +80,29 @@ const Formats = {
 	ISODateString(date) {
 		return new Date(date.getTime() - (date.getTimezoneOffset() * 60000 )).toISOString().replace(/T.*/, '');
 	},
+	/**
+	 * @param {number} timestampMs
+	 */
+	localeDateTimeString(timestampMs) {
+		return new Date(timestampMs).toLocaleString(undefined, {
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit',
+		});
+	},
+	/**
+	 * @param {number} timestampMs
+	 */
+	localeTimeString(timestampMs) {
+		return new Date(timestampMs).toLocaleTimeString(undefined, {
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit',
+		});
+	},
 };
 
 // TODO: types に組み込む
@@ -160,6 +183,7 @@ const titleSize = 40;
  * @param {function(): void} param0.save
  * @param {function(TimeRecord): void=} param0.finishAndAddRecord
  * @param {boolean=} param0.isEditable
+ * @param {boolean=} param0.hideDate
  * @returns
  */
 const RecordView = ({
@@ -168,12 +192,13 @@ const RecordView = ({
 	save,
 	finishAndAddRecord,
 	isEditable = true, // FIXME: 名前の適切化
+	hideDate = false,
 }) => {
 	// TODO: 縦位置を揃えたい
 	return createElement(
 		React.Fragment,
 		{},
-		`${new Date(record.start).toLocaleTimeString()}～${record.end ? new Date(record.end).toLocaleTimeString() : ''}`,
+		`${Formats[hideDate ? 'localeTimeString' : 'localeDateTimeString'](record.start)}～${record.end ? Formats.localeTimeString(record.end) : ''}`,
 		`(${Formats.seconds(record.workTimeSeconds)})`,
 		createElement(
 			'select',
@@ -609,7 +634,7 @@ const App = () => {
 			createElement('button', {}, 'ToDo追加'),
 		),
 		createElement('h2', {}, '現在'),
-		currentRecord ? createElement(RecordView, {types, record: currentRecord, save}) : '未開始',
+		currentRecord ? createElement(RecordView, {types, record: currentRecord, save, hideDate: true}) : '未開始',
 		createElement('h2', {}, '履歴'),
 		createElement('ol', {}, list.map((record) => {
 			return createElement(
@@ -617,7 +642,7 @@ const App = () => {
 				{
 					key: record.start,
 				},
-				createElement(RecordView, {types, record, save, finishAndAddRecord}),
+				createElement(RecordView, {types, record, save, finishAndAddRecord, hideDate: true}),
 			);
 		})),
 		createElement('h2', {}, '集計結果'),
