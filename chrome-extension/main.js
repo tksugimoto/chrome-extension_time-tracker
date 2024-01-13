@@ -127,6 +127,30 @@ const saveToStorage = (key, value) => {
 
 /**
  * @template T
+ * @param {string} settingKey
+ * @param {T} defaultValue
+ * @returns {[
+* 	T,
+* 	function(T): void
+* ]}
+*/
+const useSetting = (settingKey, defaultValue) => {
+	const storageKey = `setting.${settingKey}`;
+	const [value, setValue] = useState(defaultValue);
+	useEffect(() => {
+		loadFromStorage(storageKey, savedValeu => {
+			setValue(savedValeu ?? defaultValue);
+		});
+	}, [storageKey, defaultValue]);
+	const update = useCallback(newValue => {
+		saveToStorage(storageKey, newValue);
+		setValue(newValue);
+	}, [storageKey]);
+	return [value, update];
+};
+
+/**
+ * @template T
  * @param {string} storageKey
  * @param {Object} options
  * @param {function(any): T=} options.transform
