@@ -494,6 +494,7 @@ const App = () => {
 	const [isTypeEditMode, setTypeEditMode] = useState(false);
 	const [isTodoEditMode, setTodoEditMode] = useState(false);
 	const [isInputToDoFromClipboardEnabled, setInputToDoFromClipboardEnabled] = useSetting('clipboard-to-todo', false);
+	const [usingTodoGroup, setTodoGroup] = useSetting('use-todo-group', false);
 	const [isDetailVisible, setDetailVisible] = useSetting('detail-visible', false);
 	const [hideNoTitleOrMemo, setHideNoTitleOrMemo] = useSetting('no-title_or_memo', true);
 
@@ -571,6 +572,18 @@ const App = () => {
 		currentRecord?.finish();
 		add(new TimeRecord(args));
 	};
+
+	const todoWithIndex = todos.map((todo, originalIndex) => {
+		return {todo, originalIndex};
+	});
+	// @ts-expect-error TS2339: Property 'groupBy' does not exist on type 'MapConstructor'.
+	// もうすぐ型定義が追加される https://github.com/microsoft/TypeScript/pull/56805
+	const aaa = usingTodoGroup ? [...Map.groupBy(todoWithIndex, (({todo}) => todo.group)).entries()].sort(([a = ''], [b = '']) => {
+		return a.localeCompare(b);
+	}).flatMap(([groupName, ts]) => {
+		// TODO: 区切りを入れる
+		return ts;
+	}) : todoWithIndex;
 
 	return createElement(
 		React.Fragment,
@@ -678,14 +691,29 @@ const App = () => {
 				},
 				'クリップボードを貼り付けでToDoを入力する',
 			),
-			createElement('ul', {}, todos.map((todo, i) => {
+			createElement(
+				Checkbox, {
+					checked: usingTodoGroup,
+					onChange: setTodoGroup,
+				},
+				'グループで管理する',
+			),
+			usingTodoGroup && createElement('datalist', {
+				id: 'todo-groups',
+			}, [...new Set(todos.map(t => t.group)).values()].map(value => {
+				return createElement('option', {value});
+			})),
+			createElement('ul', {}, aaa.map(({
+				todo,
+				originalIndex,
+			}) => {
 				const isCurrent = (todo.type === currentRecord?.type) && ((todo.title || '') === (currentRecord?.title || ''));
 				const hasUrlMemo = !!todo.memo?.match(/^http[^ ]+$/);
 				const className = isCurrent ? 'current' : undefined;
 				return createElement(
 					'li',
 					{
-						key: i,
+						key: originalIndex,
 						className,
 					},
 					isTodoEditMode && createElement(
@@ -697,13 +725,27 @@ const App = () => {
 								if (window.confirm(message)) {
 									// FIXME: mutableをやめる
 									// todos.toSpliced が使える
-									todos.splice(i, 1);
+									todos.splice(originalIndex, 1);
 									saveTodo();
 								}
 							},
 						},
 						'削除',
 					),
+					// TODO: 改善
+					usingTodoGroup && (isTodoEditMode ? createElement(
+						'input',
+						{
+							value: todo.group,
+							list: 'todo-groups',
+							placeholder: 'グループ',
+							onChange: e => {
+								// FIXME: mutableをやめる
+								todo.group = e.target.value;
+								saveTodo();
+							},
+						},
+					) : todo.group),
 					createElement(
 						'button',
 						{
@@ -716,7 +758,7 @@ const App = () => {
 						},
 						'開始',
 					),
-					` [${Formats.seconds(todoWorkTimes[i].total)}] `,
+					` [${Formats.seconds(todoWorkTimes[originalIndex].total)}] `,
 					isTodoEditMode ? createElement(
 						'select',
 						{
