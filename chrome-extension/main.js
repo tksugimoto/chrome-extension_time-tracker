@@ -390,8 +390,8 @@ const App = () => {
 	});
 
 	const [isTodoEditMode, setTodoEditMode] = useState(false);
-	const [isDetailVisible, setDetailVisible] = useState(false);
-	const [hideNoTitleOrMemo, setHideNoTitleOrMemo] = useState(true);
+	const [isDetailVisible, setDetailVisible] = useSetting('detail-visible', false);
+	const [hideNoTitleOrMemo, setHideNoTitleOrMemo] = useSetting('no-title_or_memo', true);
 
 	const todoWorkTimes = allList.reduce((acc, record) => {
 		// todoのkeyが2つ(type,title)なのでMapは使えずloopで該当のindexを探すしかない
