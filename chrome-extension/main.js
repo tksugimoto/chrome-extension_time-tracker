@@ -117,6 +117,15 @@ const Formats = {
 	/**
 	 * @param {number} timestampMs
 	 */
+	localeDeadlineDateString(timestampMs) {
+		return new Date(timestampMs).toLocaleString(undefined, {
+			month: '2-digit',
+			day: '2-digit',
+		});
+	},
+	/**
+	 * @param {number} timestampMs
+	 */
 	localeDateTimeString(timestampMs) {
 		return new Date(timestampMs).toLocaleString(undefined, {
 			year: 'numeric',
@@ -331,6 +340,7 @@ const groupNothingName = '(グループなし)';
  * 	title: string;
  * 	memo?: string;
  * 	group?: string;
+ * 	deadline?: number;
  * }} Todo */
 
 /**
@@ -408,6 +418,22 @@ const TodoRow = ({
 			},
 			'開始',
 		),
+		// TODO: 期限を管理するオプション追加
+		isTodoEditMode ? createElement(
+			'input',
+			{
+				type: 'date',
+				title: '期限',
+				defaultValue: todo.deadline && Formats.ISODateString(new Date(todo.deadline)),
+				className: todo.deadline && 'has-deadline',
+				onChange: e => {
+					if (e.target.validity.badInput) return;
+					// TODO: 全localeで日付保存が問題ないか確認
+					todo.deadline = e.target.value ? startOfDate(new Date(e.target.valueAsNumber)).getTime() : undefined;
+					saveTodo();
+				},
+			},
+		) : todo.deadline && `(-${Formats.localeDeadlineDateString(todo.deadline)})`, // TODO: 期限が過ぎた/近い場合に強調表示する
 		` [${Formats.seconds(todoWorkTimes[i].total)}] `,
 		isTodoEditMode ? createElement(
 			'select',
