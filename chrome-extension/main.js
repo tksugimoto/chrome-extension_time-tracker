@@ -504,7 +504,7 @@ const App = () => {
 		),
 		createElement('h2', {}, 'ToDo'),
 		createElement(
-			Checkbox, {
+			Checkbox, { // TODO: 永続化しないチェックボックスはTab形式で切り替えにする
 				checked: isTodoEditMode,
 				onChange: setTodoEditMode,
 			},
