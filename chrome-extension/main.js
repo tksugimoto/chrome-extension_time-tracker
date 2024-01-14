@@ -127,6 +127,30 @@ const saveToStorage = (key, value) => {
 
 /**
  * @template T
+ * @param {string} settingKey
+ * @param {T} defaultValue
+ * @returns {[
+* 	T,
+* 	function(T): void
+* ]}
+*/
+const useSetting = (settingKey, defaultValue) => {
+	const storageKey = `setting.${settingKey}`;
+	const [value, setValue] = useState(defaultValue);
+	useEffect(() => {
+		loadFromStorage(storageKey, savedValeu => {
+			setValue(savedValeu ?? defaultValue);
+		});
+	}, [storageKey, defaultValue]);
+	const update = useCallback(newValue => {
+		saveToStorage(storageKey, newValue);
+		setValue(newValue);
+	}, [storageKey]);
+	return [value, update];
+};
+
+/**
+ * @template T
  * @param {string} storageKey
  * @param {Object} options
  * @param {function(any): T=} options.transform
@@ -366,8 +390,8 @@ const App = () => {
 	});
 
 	const [isTodoEditMode, setTodoEditMode] = useState(false);
-	const [isDetailVisible, setDetailVisible] = useState(false);
-	const [hideNoTitleOrMemo, setHideNoTitleOrMemo] = useState(true);
+	const [isDetailVisible, setDetailVisible] = useSetting('detail-visible', false);
+	const [hideNoTitleOrMemo, setHideNoTitleOrMemo] = useSetting('no-title_or_memo', true);
 
 	const todoWorkTimes = allList.reduce((acc, record) => {
 		// todoのkeyが2つ(type,title)なのでMapは使えずloopで該当のindexを探すしかない
@@ -480,7 +504,7 @@ const App = () => {
 		),
 		createElement('h2', {}, 'ToDo'),
 		createElement(
-			Checkbox, {
+			Checkbox, { // TODO: 永続化しないチェックボックスはTab形式で切り替えにする
 				checked: isTodoEditMode,
 				onChange: setTodoEditMode,
 			},
