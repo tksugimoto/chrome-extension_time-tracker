@@ -532,6 +532,7 @@ const EditModeTab = ({
 		{},
 		createElement(
 			'div', {
+				className: 'sticky',
 				style: {
 					paddingLeft: contentsBorderRadius, // 角の丸みの上にタブが乗らないようにずらす
 				},
