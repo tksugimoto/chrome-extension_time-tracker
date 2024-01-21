@@ -5,6 +5,7 @@ const {
 	createElement,
 	useState,
 	useCallback,
+	useRef,
 	useEffect,
 	useMemo,
 } = React;
@@ -608,6 +609,59 @@ const Checkbox = ({
 			children,
 		),
 	);
+};
+
+// forwardRefの型指定が難しいためhookにした
+const useDialog = () => {
+	/** @type {React.MutableRefObject<HTMLDialogElement | null>} */
+	const dialogRef = useRef(null);
+	const showModalDialog = useCallback(() => dialogRef.current?.showModal(), []);
+
+	/**
+	 * @param {import("react").PropsWithChildren<{}>} param0
+	 */
+	const Dialog = ({
+		children,
+	}) => createElement(
+		'dialog', {
+			ref: dialogRef,
+			onClick: e => {
+				if (e.target === dialogRef.current) {
+					// backdrop クリック時は閉じる
+					dialogRef.current.close();
+				}
+			},
+		},
+		createElement(
+			'div',
+			{
+				style: {
+					minWidth: 500,
+					minHeight: 500,
+				},
+			},
+			createElement(
+				'div',
+				{
+					style: {
+						display: 'flex',
+						justifyContent: 'flex-end',
+					},
+				},
+				createElement('button', {
+						onClick: e => {
+							e.preventDefault();
+							dialogRef.current?.close();
+						},
+					}, '閉じる'),
+				),
+			children,
+		),
+	);
+	return {
+		Dialog: useCallback(Dialog, []),
+		showModalDialog,
+	};
 };
 
 /**
