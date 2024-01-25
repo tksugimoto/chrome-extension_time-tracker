@@ -422,6 +422,7 @@ const App = () => {
 		transform: TimeRecord.load,
 	});
 
+	const [isTypeEditMode, setTypeEditMode] = useState(false);
 	const [isTodoEditMode, setTodoEditMode] = useState(false);
 	const [isInputToDoFromClipboardEnabled, setInputToDoFromClipboardEnabled] = useSetting('clipboard-to-todo', false);
 	const [isDetailVisible, setDetailVisible] = useSetting('detail-visible', false);
@@ -500,6 +501,13 @@ const App = () => {
 		{},
 		createElement('h1', {}, 'Time Tracker'),
 		createElement('h2', {}, '分類'),
+		createElement(
+			Checkbox, { // TODO: 永続化しないチェックボックスはTab形式で切り替えにする
+				checked: isTypeEditMode,
+				onChange: setTypeEditMode,
+			},
+			'編集モード',
+		),
 		createElement('ul', {}, types.map((type, i) => {
 			return createElement(
 				'li',
@@ -507,7 +515,7 @@ const App = () => {
 					key: type.name,
 					className: type.name === currentRecord?.type ? 'current' : undefined,
 				},
-				createElement(
+				isTypeEditMode && createElement(
 					'button',
 					{
 						onClick: () => {
@@ -533,7 +541,7 @@ const App = () => {
 				type.name,
 			);
 		})),
-		createElement(
+		isTypeEditMode && createElement(
 			'form',
 			{
 				onSubmit: e => {
