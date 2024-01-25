@@ -532,11 +532,28 @@ const App = () => {
 				createElement(
 					'button',
 					{
+						accessKey: type.accessKey,
 						onClick: () => {
 							finishAndAddRecord({type: type.name});
 						},
 					},
-					'開始',
+					'開始' + (!isTypeEditMode && type.accessKey ? ` (${type.accessKey})` : ''),
+				),
+				isTypeEditMode && createElement(
+					'input',
+					{
+						title: 'アクセスキー: ' + (type.accessKey ?? 'なし'),
+						placeholder: 'アクセスキーなし',
+						// TODO: 他と重複していたら警告する
+						defaultValue: type.accessKey,
+						maxLength: 1,
+						size: 2,
+						onChange: e => {
+							// FIXME: mutableをやめる
+							type.accessKey = e.target.value || undefined;
+							saveType();
+						},
+					},
 				),
 				type.name,
 			);
