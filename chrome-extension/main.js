@@ -6,6 +6,7 @@ const {
 	useState,
 	useCallback,
 	useEffect,
+	useMemo,
 } = React;
 
 const domParser = new DOMParser();
@@ -394,6 +395,29 @@ const defaultTypes = [{
 	name: '中断',
 }];
 
+const recExpCharacterClassMetaChars = [
+	'\\',
+	'-',
+	']',
+	// Pattern は vフラグ(unicodeSets)が有効なため追加のescapeが必要
+	'(',
+	')',
+	'[',
+	'{',
+	'}',
+	'/',
+	'|',
+];
+/**
+ *
+ * @param {string} char
+ * @returns
+ */
+const escapeCharacterClassMetaChar = char => {
+	if (recExpCharacterClassMetaChars.includes(char)) return `\\${char}`;
+	return char;
+};
+
 const App = () => {
 	const {
 		allList: todos,
@@ -449,6 +473,10 @@ const App = () => {
 		window.addEventListener('paste', listener);
 		return () => window.removeEventListener('paste', listener);
 	}, [isInputToDoFromClipboardEnabled]);
+
+	const usedAccessKeys = useMemo(() => {
+		return types.map(type => type.accessKey).filter(Boolean);
+	}, [types]);
 
 	const todoWorkTimes = allList.reduce((acc, record) => {
 		// todoのkeyが2つ(type,title)なのでMapは使えずloopで該当のindexを探すしかない
@@ -544,11 +572,12 @@ const App = () => {
 					{
 						title: 'アクセスキー: ' + (type.accessKey ?? 'なし'),
 						placeholder: 'アクセスキーなし',
-						// TODO: 他と重複していたら警告する
+						pattern: type.accessKey ? null : `[^${usedAccessKeys.map(escapeCharacterClassMetaChar).join('')}]`,
 						defaultValue: type.accessKey,
 						maxLength: 1,
 						size: 2,
 						onChange: e => {
+							if (e.target.validity.patternMismatch) return;
 							// FIXME: mutableをやめる
 							type.accessKey = e.target.value || undefined;
 							saveType();
