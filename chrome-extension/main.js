@@ -6,6 +6,7 @@ const {
 	useState,
 	useCallback,
 	useEffect,
+	useMemo,
 } = React;
 
 const domParser = new DOMParser();
@@ -394,6 +395,29 @@ const defaultTypes = [{
 	name: '中断',
 }];
 
+const recExpCharacterClassMetaChars = [
+	'\\',
+	'-',
+	']',
+	// Pattern は vフラグ(unicodeSets)が有効なため追加のescapeが必要
+	'(',
+	')',
+	'[',
+	'{',
+	'}',
+	'/',
+	'|',
+];
+/**
+ *
+ * @param {string} char
+ * @returns
+ */
+const escapeCharacterClassMetaChar = char => {
+	if (recExpCharacterClassMetaChars.includes(char)) return `\\${char}`;
+	return char;
+};
+
 const App = () => {
 	const {
 		allList: todos,
@@ -449,6 +473,13 @@ const App = () => {
 		window.addEventListener('paste', listener);
 		return () => window.removeEventListener('paste', listener);
 	}, [isInputToDoFromClipboardEnabled]);
+
+	const usedAccessKeys = useMemo(() => {
+		return types.map(type => type.accessKey).filter(Boolean).flatMap(c => {
+			// アクセスキーは大文字小文字を区別しない
+			return [c.toLowerCase(), c.toUpperCase()];
+		});
+	}, [types]);
 
 	const todoWorkTimes = allList.reduce((acc, record) => {
 		// todoのkeyが2つ(type,title)なのでMapは使えずloopで該当のindexを探すしかない
@@ -532,11 +563,35 @@ const App = () => {
 				createElement(
 					'button',
 					{
+						accessKey: type.accessKey,
 						onClick: () => {
 							finishAndAddRecord({type: type.name});
 						},
 					},
-					'開始',
+					'開始' + (!isTypeEditMode && type.accessKey ? ` (${type.accessKey})` : ''),
+				),
+				isTypeEditMode && createElement(
+					'input',
+					{
+						title: 'アクセスキー: ' + (type.accessKey ?? 'なし'),
+						placeholder: 'アクセスキーなし',
+						pattern: type.accessKey ? null : `[^${usedAccessKeys.map(escapeCharacterClassMetaChar).join('')}]`,
+						defaultValue: type.accessKey,
+						maxLength: 1,
+						size: 2,
+						onBlur: e => {
+							if (e.target.validity.patternMismatch) {
+								// 別の入力欄を編集して不正じゃなくなった場合に`:invalid`ではなくなり正常に登録されたと誤解するため入力を削除する
+								e.target.value = '';
+							}
+						},
+						onChange: e => {
+							if (e.target.validity.patternMismatch) return;
+							// FIXME: mutableをやめる
+							type.accessKey = e.target.value || undefined;
+							saveType();
+						},
+					},
 				),
 				type.name,
 			);
