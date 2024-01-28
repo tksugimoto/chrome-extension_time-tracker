@@ -475,7 +475,10 @@ const App = () => {
 	}, [isInputToDoFromClipboardEnabled]);
 
 	const usedAccessKeys = useMemo(() => {
-		return types.map(type => type.accessKey).filter(Boolean);
+		return types.map(type => type.accessKey).filter(Boolean).flatMap(c => {
+			// アクセスキーは大文字小文字を区別しない
+			return [c.toLowerCase(), c.toUpperCase()];
+		});
 	}, [types]);
 
 	const todoWorkTimes = allList.reduce((acc, record) => {
