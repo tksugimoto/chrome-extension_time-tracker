@@ -579,6 +579,12 @@ const App = () => {
 						defaultValue: type.accessKey,
 						maxLength: 1,
 						size: 2,
+						onBlur: e => {
+							if (e.target.validity.patternMismatch) {
+								// 別の入力欄を編集して不正じゃなくなった場合に`:invalid`ではなくなり正常に登録されたと誤解するため入力を削除する
+								e.target.value = '';
+							}
+						},
 						onChange: e => {
 							if (e.target.validity.patternMismatch) return;
 							// FIXME: mutableをやめる
