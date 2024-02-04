@@ -240,6 +240,7 @@ const titleSize = 40;
  * @param {{name: string}[]} param0.types
  * @param {TimeRecord} param0.record
  * @param {function(): void} param0.save
+ * @param {function(TimeRecord): void} param0.editTime
  * @param {function(TimeRecord): void=} param0.finishAndAddRecord
  * @param {boolean=} param0.isEditable
  * @param {boolean=} param0.hideDate
@@ -249,6 +250,7 @@ const RecordView = ({
 	types,
 	record,
 	save,
+	editTime,
 	finishAndAddRecord,
 	isEditable = true, // FIXME: 名前の適切化
 	hideDate = false,
@@ -259,6 +261,11 @@ const RecordView = ({
 		{},
 		`${Formats[hideDate ? 'localeTimeString' : 'localeDateTimeString'](record.start)}～${record.end ? Formats.localeTimeString(record.end) : ''}`,
 		`(${Formats.seconds(record.workTimeSeconds)})`,
+		createElement('button', {
+			onClick: () => {
+				editTime(record);
+			},
+		}, '編集'),
 		createElement(
 			'select',
 			{
@@ -755,6 +762,21 @@ const App = () => {
 		};
 	}));
 
+	/**
+	 *
+	 * @param {TimeRecord} record
+	 */
+	const editTime = record => {
+		console.log(record);
+		// TODO: Modalの中を変更する
+		showModalDialog();
+	};
+
+	const {
+		Dialog,
+		showModalDialog,
+	} = useDialog();
+
 	// TODO: 日付関連もう少し整理する
 	const list = allList.filter(record => record.isDateOf(startOfDate()));
 
@@ -871,6 +893,27 @@ const App = () => {
 					},
 				),
 				createElement('button', {}, '分類追加'),
+			),
+		),
+		createElement('h2', {}, 'モーダル'),
+		createElement('button', {
+			onClick: showModalDialog,
+		}, '開く'),
+		createElement(
+			Dialog, {
+				onSubmit: () => {
+					console.log('dialog submit');
+				},
+			},
+			createElement(
+				'input',
+				{
+					type: 'time',
+					// defaultValue: Formats.ISODateString(targetDate),
+					onChange: e => {
+						if (e.target.validity.badInput) return;
+					},
+				},
 			),
 		),
 		createElement('h2', {}, 'ToDo'),
@@ -1039,7 +1082,7 @@ const App = () => {
 			),
 		),
 		createElement('h2', {}, '現在'),
-		currentRecord ? createElement(RecordView, {types, record: currentRecord, save, hideDate: true}) : '未開始',
+		currentRecord ? createElement(RecordView, {types, record: currentRecord, save, editTime, hideDate: true}) : '未開始',
 		createElement('h2', {}, '履歴'),
 		createElement('ol', {}, list.map((record) => {
 			return createElement(
@@ -1047,7 +1090,7 @@ const App = () => {
 				{
 					key: record.start,
 				},
-				createElement(RecordView, {types, record, save, finishAndAddRecord, hideDate: true}),
+				createElement(RecordView, {types, record, save, editTime, finishAndAddRecord, hideDate: true}),
 			);
 		})),
 		createElement('h2', {}, '集計結果'),
@@ -1110,7 +1153,7 @@ const App = () => {
 						{
 							key: record.start,
 						},
-						createElement(RecordView, {types, record, save, finishAndAddRecord, isEditable: false}),
+						createElement(RecordView, {types, record, save, editTime, finishAndAddRecord, isEditable: false}),
 					);
 				})),
 			);
