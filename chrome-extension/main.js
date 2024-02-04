@@ -375,6 +375,51 @@ const Checkbox = ({
 };
 
 /**
+ * ※ setTodoEditMode を外でも使用しているため、 state をこのコンポーネント内に閉じ込めるのは断念
+ * @param {import("react").PropsWithChildren<{
+* 	checked: boolean,
+* 	onChange: function(boolean): void,
+* }>} param0
+* @returns
+*/
+const EditModeTab = ({
+	children,
+	checked,
+	onChange,
+}) => {
+	const contentsBorderRadius = '0.5em';
+	return createElement(
+		React.Fragment,
+		{},
+		createElement(
+			'div', {
+				style: {
+					paddingLeft: contentsBorderRadius, // 角の丸みの上にタブが乗らないようにずらす
+				},
+			},
+			createElement('button', {
+				onClick: () => onChange(false),
+				className: ['tab', !checked && 'selected'].filter(Boolean).join(' '),
+			}, '表示モード'),
+			createElement('button', {
+				onClick: () => onChange(true),
+				className: ['tab', checked && 'selected'].filter(Boolean).join(' '),
+			}, '編集モード'),
+		),
+		createElement(
+			'div', {
+				style: {
+					border: 'solid 1px grey',
+					borderRadius: contentsBorderRadius,
+					padding: '5px',
+				},
+			},
+			children,
+		),
+	);
+};
+
+/**
  *
  * @param {{name: string}[]} types
  * @param {string} current
@@ -533,255 +578,253 @@ const App = () => {
 		createElement('h1', {}, 'Time Tracker'),
 		createElement('h2', {}, '分類'),
 		createElement(
-			Checkbox, { // TODO: 永続化しないチェックボックスはTab形式で切り替えにする
+			EditModeTab, {
 				checked: isTypeEditMode,
 				onChange: setTypeEditMode,
 			},
-			'編集モード',
-		),
-		createElement('ul', {}, types.map((type, i) => {
-			return createElement(
-				'li',
-				{
-					key: type.name,
-					className: type.name === currentRecord?.type ? 'current' : undefined,
-				},
-				isTypeEditMode && createElement(
-					'button',
+			createElement('ul', {}, types.map((type, i) => {
+				return createElement(
+					'li',
 					{
-						onClick: () => {
-							if (window.confirm(`「${type.name}」を削除しますか？`)) {
+						key: type.name,
+						className: type.name === currentRecord?.type ? 'current' : undefined,
+					},
+					isTypeEditMode && createElement(
+						'button',
+						{
+							onClick: () => {
+								if (window.confirm(`「${type.name}」を削除しますか？`)) {
+									// FIXME: mutableをやめる
+									// types.toSpliced が使える
+									types.splice(i, 1);
+									saveType();
+								}
+							},
+						},
+						'削除',
+					),
+					createElement(
+						'button',
+						{
+							accessKey: type.accessKey,
+							onClick: () => {
+								finishAndAddRecord({type: type.name});
+							},
+						},
+						'開始' + (!isTypeEditMode && type.accessKey ? ` (${type.accessKey})` : ''),
+					),
+					isTypeEditMode && createElement(
+						'input',
+						{
+							title: 'アクセスキー: ' + (type.accessKey ?? 'なし'),
+							placeholder: 'アクセスキーなし',
+							pattern: type.accessKey ? null : `[^${usedAccessKeys.map(escapeCharacterClassMetaChar).join('')}]`,
+							defaultValue: type.accessKey,
+							maxLength: 1,
+							size: 2,
+							onBlur: e => {
+								if (e.target.validity.patternMismatch) {
+									// 別の入力欄を編集して不正じゃなくなった場合に`:invalid`ではなくなり正常に登録されたと誤解するため入力を削除する
+									e.target.value = '';
+								}
+							},
+							onChange: e => {
+								if (e.target.validity.patternMismatch) return;
 								// FIXME: mutableをやめる
-								// types.toSpliced が使える
-								types.splice(i, 1);
+								type.accessKey = e.target.value || undefined;
 								saveType();
-							}
+							},
 						},
+					),
+					type.name,
+				);
+			})),
+			isTypeEditMode && createElement(
+				'form',
+				{
+					onSubmit: e => {
+						// TODO: 重複チェック
+						addType({
+							name: newType,
+						});
+						setNewType('');
+						e.preventDefault();
 					},
-					'削除',
-				),
+				},
 				createElement(
-					'button',
-					{
-						accessKey: type.accessKey,
-						onClick: () => {
-							finishAndAddRecord({type: type.name});
-						},
-					},
-					'開始' + (!isTypeEditMode && type.accessKey ? ` (${type.accessKey})` : ''),
-				),
-				isTypeEditMode && createElement(
 					'input',
 					{
-						title: 'アクセスキー: ' + (type.accessKey ?? 'なし'),
-						placeholder: 'アクセスキーなし',
-						pattern: type.accessKey ? null : `[^${usedAccessKeys.map(escapeCharacterClassMetaChar).join('')}]`,
-						defaultValue: type.accessKey,
-						maxLength: 1,
-						size: 2,
-						onBlur: e => {
-							if (e.target.validity.patternMismatch) {
-								// 別の入力欄を編集して不正じゃなくなった場合に`:invalid`ではなくなり正常に登録されたと誤解するため入力を削除する
-								e.target.value = '';
-							}
-						},
+						required: true,
+						value: newType,
+						placeholder: '分類',
 						onChange: e => {
-							if (e.target.validity.patternMismatch) return;
-							// FIXME: mutableをやめる
-							type.accessKey = e.target.value || undefined;
-							saveType();
+							setNewType(e.target.value);
 						},
 					},
 				),
-				type.name,
-			);
-		})),
-		isTypeEditMode && createElement(
-			'form',
-			{
-				onSubmit: e => {
-					// TODO: 重複チェック
-					addType({
-						name: newType,
-					});
-					setNewType('');
-					e.preventDefault();
-				},
-			},
-			createElement(
-				'input',
-				{
-					required: true,
-					value: newType,
-					placeholder: '分類',
-					onChange: e => {
-						setNewType(e.target.value);
-					},
-				},
+				createElement('button', {}, '分類追加'),
 			),
-			createElement('button', {}, '分類追加'),
 		),
 		createElement('h2', {}, 'ToDo'),
 		createElement(
-			Checkbox, { // TODO: 永続化しないチェックボックスはTab形式で切り替えにする
+			EditModeTab, {
 				checked: isTodoEditMode,
 				onChange: setTodoEditMode,
 			},
-			'編集モード',
-		),
-		createElement(
-			Checkbox, {
-				checked: isInputToDoFromClipboardEnabled,
-				onChange: setInputToDoFromClipboardEnabled,
-			},
-			'クリップボードを貼り付けでToDoを入力する',
-		),
-		createElement('ul', {}, todos.map((todo, i) => {
-			const isCurrent = (todo.type === currentRecord?.type) && ((todo.title || '') === (currentRecord?.title || ''));
-			const hasUrlMemo = !!todo.memo?.match(/^http[^ ]+$/);
-			const className = isCurrent ? 'current' : undefined;
-			return createElement(
-				'li',
-				{
-					key: i,
-					className,
+			createElement(
+				Checkbox, {
+					checked: isInputToDoFromClipboardEnabled,
+					onChange: setInputToDoFromClipboardEnabled,
 				},
-				isTodoEditMode && createElement(
-					'button',
+				'クリップボードを貼り付けでToDoを入力する',
+			),
+			createElement('ul', {}, todos.map((todo, i) => {
+				const isCurrent = (todo.type === currentRecord?.type) && ((todo.title || '') === (currentRecord?.title || ''));
+				const hasUrlMemo = !!todo.memo?.match(/^http[^ ]+$/);
+				const className = isCurrent ? 'current' : undefined;
+				return createElement(
+					'li',
 					{
-						onClick: () => {
-							const desc = todo.title || todo.memo || '-';
-							const message = `「${todo.type}(${desc})」を削除しますか？`;
-							if (window.confirm(message)) {
+						key: i,
+						className,
+					},
+					isTodoEditMode && createElement(
+						'button',
+						{
+							onClick: () => {
+								const desc = todo.title || todo.memo || '-';
+								const message = `「${todo.type}(${desc})」を削除しますか？`;
+								if (window.confirm(message)) {
+									// FIXME: mutableをやめる
+									// todos.toSpliced が使える
+									todos.splice(i, 1);
+									saveTodo();
+								}
+							},
+						},
+						'削除',
+					),
+					createElement(
+						'button',
+						{
+							onClick: () => {
+								finishAndAddRecord(todo);
+							},
+							style: {
+								userSelect: 'none', // TODO listをコピーしやすくするため
+							},
+						},
+						'開始',
+					),
+					` [${Formats.seconds(todoWorkTimes[i].total)}] `,
+					isTodoEditMode ? createElement(
+						'select',
+						{
+							value: todo.type,
+							onChange: e => {
 								// FIXME: mutableをやめる
-								// todos.toSpliced が使える
-								todos.splice(i, 1);
+								todo.type = e.target.value;
 								saveTodo();
-							}
+							},
 						},
+						typesToNamesWithCurrent(types, todo.type).map((type, i) => {
+							return createElement('option', {
+								key: i,
+								value: type,
+							}, type);
+						}),
+					) : todo.type,
+					isTodoEditMode ? createElement(
+						'input',
+						{
+							value: todo.title,
+							placeholder: 'タイトル',
+							size: titleSize,
+							onChange: e => {
+								// FIXME: mutableをやめる
+								todo.title = e.target.value;
+								saveTodo();
+							},
+						},
+					) : (
+						hasUrlMemo ? createElement(
+							'a',
+							{
+								href: todo.memo,
+								target: '_blank',
+							},
+							`(${todo.title || todo.memo})`, // TODO: 区切り()がリンクになって統一感がない問題に対応≒区切りを()から変更
+						) : `(${todo.title || '-'})`
+					),
+					isTodoEditMode ? createElement(
+						'input',
+						{
+							value: todo.memo,
+							placeholder: 'メモ / URL',
+							onChange: e => {
+								// FIXME: mutableをやめる
+								todo.memo = e.target.value;
+								saveTodo();
+							},
+						},
+					) : hasUrlMemo ? '' : todo.memo,
+				);
+			})),
+			'※ ToDoごとの経過時間の集計には分類・タイトルのみを使用し、メモ / URLの違いを無視する',
+			isTodoEditMode && createElement(
+				'form',
+				{
+					onSubmit: e => {
+						// TODO: 重複チェック(type,titleで一意)
+						addTodo({
+							type: newTodoType,
+							title: newTodoTitle,
+							memo: newTodoMemo,
+						});
+						setNewTodoTitle('');
+						setNewTodoMemo('');
+						e.preventDefault();
 					},
-					'削除',
-				),
+				},
 				createElement(
-					'button',
-					{
-						onClick: () => {
-							finishAndAddRecord(todo);
-						},
-						style: {
-							userSelect: 'none', // TODO listをコピーしやすくするため
-						},
-					},
-					'開始',
-				),
-				` [${Formats.seconds(todoWorkTimes[i].total)}] `,
-				isTodoEditMode ? createElement(
 					'select',
 					{
-						value: todo.type,
+						required: true,
+						value: newTodoType,
 						onChange: e => {
-							// FIXME: mutableをやめる
-							todo.type = e.target.value;
-							saveTodo();
+							setNewTodoType(e.target.value);
 						},
 					},
-					typesToNamesWithCurrent(types, todo.type).map((type, i) => {
+					typesToNamesWithCurrent(types, '').map((type, i) => {
 						return createElement('option', {
 							key: i,
 							value: type,
-						}, type);
+						}, type || '【分類】');
 					}),
-				) : todo.type,
-				isTodoEditMode ? createElement(
+				),
+				createElement(
 					'input',
 					{
-						value: todo.title,
+						value: newTodoTitle,
 						placeholder: 'タイトル',
 						size: titleSize,
 						onChange: e => {
-							// FIXME: mutableをやめる
-							todo.title = e.target.value;
-							saveTodo();
+							setNewTodoTitle(e.target.value);
 						},
 					},
-				) : (
-					hasUrlMemo ? createElement(
-						'a',
-						{
-							href: todo.memo,
-							target: '_blank',
-						},
-						`(${todo.title || todo.memo})`, // TODO: 区切り()がリンクになって統一感がない問題に対応≒区切りを()から変更
-					) : `(${todo.title || '-'})`
 				),
-				isTodoEditMode ? createElement(
+				createElement(
 					'input',
 					{
-						value: todo.memo,
+						value: newTodoMemo,
 						placeholder: 'メモ / URL',
 						onChange: e => {
-							// FIXME: mutableをやめる
-							todo.memo = e.target.value;
-							saveTodo();
+							setNewTodoMemo(e.target.value);
 						},
 					},
-				) : hasUrlMemo ? '' : todo.memo,
-			);
-		})),
-		'※ ToDoごとの経過時間の集計には分類・タイトルのみを使用し、メモ / URLの違いを無視する',
-		isTodoEditMode && createElement(
-			'form',
-			{
-				onSubmit: e => {
-					// TODO: 重複チェック(type,titleで一意)
-					addTodo({
-						type: newTodoType,
-						title: newTodoTitle,
-						memo: newTodoMemo,
-					});
-					setNewTodoTitle('');
-					setNewTodoMemo('');
-					e.preventDefault();
-				},
-			},
-			createElement(
-				'select',
-				{
-					required: true,
-					value: newTodoType,
-					onChange: e => {
-						setNewTodoType(e.target.value);
-					},
-				},
-				typesToNamesWithCurrent(types, '').map((type, i) => {
-					return createElement('option', {
-						key: i,
-						value: type,
-					}, type || '【分類】');
-				}),
+				),
+				createElement('button', {}, 'ToDo追加'),
 			),
-			createElement(
-				'input',
-				{
-					value: newTodoTitle,
-					placeholder: 'タイトル',
-					size: titleSize,
-					onChange: e => {
-						setNewTodoTitle(e.target.value);
-					},
-				},
-			),
-			createElement(
-				'input',
-				{
-					value: newTodoMemo,
-					placeholder: 'メモ / URL',
-					onChange: e => {
-						setNewTodoMemo(e.target.value);
-					},
-				},
-			),
-			createElement('button', {}, 'ToDo追加'),
 		),
 		createElement('h2', {}, '現在'),
 		currentRecord ? createElement(RecordView, {types, record: currentRecord, save, hideDate: true}) : '未開始',
