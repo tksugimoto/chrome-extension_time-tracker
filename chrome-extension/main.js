@@ -387,17 +387,35 @@ const EditModeTab = ({
 	checked,
 	onChange,
 }) => {
+	const contentsBorderRadius = '0.5em';
 	return createElement(
 		React.Fragment,
 		{},
 		createElement(
-			Checkbox, { // TODO: 永続化しないチェックボックスはTab形式で切り替えにする
-				checked,
-				onChange,
+			'div', {
+				style: {
+					paddingLeft: contentsBorderRadius, // 角の丸みの上にタブが乗らないようにずらす
+				},
 			},
-			'編集モード',
+			createElement('button', {
+				onClick: () => onChange(false),
+				className: ['tab', !checked && 'selected'].filter(Boolean).join(' '),
+			}, '表示モード'),
+			createElement('button', {
+				onClick: () => onChange(true),
+				className: ['tab', checked && 'selected'].filter(Boolean).join(' '),
+			}, '編集モード'),
 		),
-		children,
+		createElement(
+			'div', {
+				style: {
+					border: 'solid 1px grey',
+					borderRadius: contentsBorderRadius,
+					padding: '5px',
+				},
+			},
+			children,
+		),
 	);
 };
 
