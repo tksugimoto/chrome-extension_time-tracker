@@ -324,6 +324,122 @@ const RecordView = ({
 	);
 };
 
+/** @typedef {{
+ * 	type: string;
+ * 	title: string;
+ * 	memo?: string;
+ * }} Todo */
+
+/**
+ * @param {{
+ * 	todo: Todo;
+ * 	i: number;
+ * 	isTodoEditMode: boolean;
+ * 	todos: Todo[],
+ * 	saveTodo: function(): void
+ * 	finishAndAddRecord: function(TimeRecord | Todo): void
+ * 	types: {name: string}[];
+ * 	todoWorkTimes: {total: number}[];
+ * }} param0
+ * @returns
+ */
+const TodoRow = ({
+	todo,
+	i,
+	isTodoEditMode,
+	todos,
+	saveTodo,
+	finishAndAddRecord,
+	types,
+	todoWorkTimes,
+}) => {
+	const hasUrlMemo = !!todo.memo?.match(/^http[^ ]+$/);
+	return createElement(
+		React.Fragment,
+		{},
+		isTodoEditMode && createElement(
+			'button',
+			{
+				onClick: () => {
+					const desc = todo.title || todo.memo || '-';
+					const message = `「${todo.type}(${desc})」を削除しますか？`;
+					if (window.confirm(message)) {
+						// FIXME: mutableをやめる
+						// todos.toSpliced が使える
+						todos.splice(i, 1);
+						saveTodo();
+					}
+				},
+			},
+			'削除',
+		),
+		createElement(
+			'button',
+			{
+				onClick: () => {
+					finishAndAddRecord(todo);
+				},
+				style: {
+					userSelect: 'none', // TODO listをコピーしやすくするため
+				},
+			},
+			'開始',
+		),
+		` [${Formats.seconds(todoWorkTimes[i].total)}] `,
+		isTodoEditMode ? createElement(
+			'select',
+			{
+				value: todo.type,
+				onChange: e => {
+					// FIXME: mutableをやめる
+					todo.type = e.target.value;
+					saveTodo();
+				},
+			},
+			typesToNamesWithCurrent(types, todo.type).map((type, i) => {
+				return createElement('option', {
+					key: i,
+					value: type,
+				}, type);
+			}),
+		) : todo.type,
+		isTodoEditMode ? createElement(
+			'input',
+			{
+				value: todo.title,
+				placeholder: 'タイトル',
+				size: titleSize,
+				onChange: e => {
+					// FIXME: mutableをやめる
+					todo.title = e.target.value;
+					saveTodo();
+				},
+			},
+		) : (
+			hasUrlMemo ? createElement(
+				'a',
+				{
+					href: todo.memo,
+					target: '_blank',
+				},
+				`(${todo.title || todo.memo})`, // TODO: 区切り()がリンクになって統一感がない問題に対応≒区切りを()から変更
+			) : `(${todo.title || '-'})`
+		),
+		isTodoEditMode ? createElement(
+			'input',
+			{
+				value: todo.memo,
+				placeholder: 'メモ / URL',
+				onChange: e => {
+					// FIXME: mutableをやめる
+					todo.memo = e.target.value;
+					saveTodo();
+				},
+			},
+		) : hasUrlMemo ? '' : todo.memo,
+	);
+};
+
 /**
  *
  * @param {import("react").PropsWithChildren<{
@@ -683,7 +799,6 @@ const App = () => {
 			),
 			createElement('ul', {}, todos.map((todo, i) => {
 				const isCurrent = (todo.type === currentRecord?.type) && ((todo.title || '') === (currentRecord?.title || ''));
-				const hasUrlMemo = !!todo.memo?.match(/^http[^ ]+$/);
 				const className = isCurrent ? 'current' : undefined;
 				return createElement(
 					'li',
@@ -691,86 +806,19 @@ const App = () => {
 						key: i,
 						className,
 					},
-					isTodoEditMode && createElement(
-						'button',
-						{
-							onClick: () => {
-								const desc = todo.title || todo.memo || '-';
-								const message = `「${todo.type}(${desc})」を削除しますか？`;
-								if (window.confirm(message)) {
-									// FIXME: mutableをやめる
-									// todos.toSpliced が使える
-									todos.splice(i, 1);
-									saveTodo();
-								}
-							},
-						},
-						'削除',
-					),
 					createElement(
-						'button',
+						TodoRow,
 						{
-							onClick: () => {
-								finishAndAddRecord(todo);
-							},
-							style: {
-								userSelect: 'none', // TODO listをコピーしやすくするため
-							},
+							todo,
+							i,
+							isTodoEditMode,
+							todos,
+							saveTodo,
+							finishAndAddRecord,
+							types,
+							todoWorkTimes,
 						},
-						'開始',
 					),
-					` [${Formats.seconds(todoWorkTimes[i].total)}] `,
-					isTodoEditMode ? createElement(
-						'select',
-						{
-							value: todo.type,
-							onChange: e => {
-								// FIXME: mutableをやめる
-								todo.type = e.target.value;
-								saveTodo();
-							},
-						},
-						typesToNamesWithCurrent(types, todo.type).map((type, i) => {
-							return createElement('option', {
-								key: i,
-								value: type,
-							}, type);
-						}),
-					) : todo.type,
-					isTodoEditMode ? createElement(
-						'input',
-						{
-							value: todo.title,
-							placeholder: 'タイトル',
-							size: titleSize,
-							onChange: e => {
-								// FIXME: mutableをやめる
-								todo.title = e.target.value;
-								saveTodo();
-							},
-						},
-					) : (
-						hasUrlMemo ? createElement(
-							'a',
-							{
-								href: todo.memo,
-								target: '_blank',
-							},
-							`(${todo.title || todo.memo})`, // TODO: 区切り()がリンクになって統一感がない問題に対応≒区切りを()から変更
-						) : `(${todo.title || '-'})`
-					),
-					isTodoEditMode ? createElement(
-						'input',
-						{
-							value: todo.memo,
-							placeholder: 'メモ / URL',
-							onChange: e => {
-								// FIXME: mutableをやめる
-								todo.memo = e.target.value;
-								saveTodo();
-							},
-						},
-					) : hasUrlMemo ? '' : todo.memo,
 				);
 			})),
 			'※ ToDoごとの経過時間の集計には分類・タイトルのみを使用し、メモ / URLの違いを無視する',
