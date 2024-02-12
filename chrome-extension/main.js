@@ -333,7 +333,6 @@ const RecordView = ({
 /**
  * @param {{
  * 	todo: Todo;
- * 	i: number;
  * 	isTodoEditMode: boolean;
  * 	todos: Todo[],
  * 	saveTodo: function(): void
@@ -345,7 +344,6 @@ const RecordView = ({
  */
 const TodoRow = ({
 	todo,
-	i,
 	isTodoEditMode,
 	todos,
 	saveTodo,
@@ -354,6 +352,7 @@ const TodoRow = ({
 	todoWorkTimes,
 }) => {
 	const hasUrlMemo = !!todo.memo?.match(/^http[^ ]+$/);
+	const i = todos.indexOf(todo);
 	return createElement(
 		React.Fragment,
 		{},
@@ -810,7 +809,6 @@ const App = () => {
 						TodoRow,
 						{
 							todo,
-							i,
 							isTodoEditMode,
 							todos,
 							saveTodo,
