@@ -1233,36 +1233,42 @@ const App = () => {
 		})),
 		createElement('h2', {}, '集計結果'),
 		createElement(
-			'input',
+			'div',
 			{
-				type: 'date',
-				defaultValue: Formats.ISODateString(targetDate),
-				onChange: e => {
-					if (e.target.validity.badInput) return;
-					setTargetDate(startOfDate(new Date(e.target.valueAsNumber)));
+				className: 'sticky',
+			},
+			createElement(
+				'input',
+				{
+					type: 'date',
+					defaultValue: Formats.ISODateString(targetDate),
+					onChange: e => {
+						if (e.target.validity.badInput) return;
+						setTargetDate(startOfDate(new Date(e.target.valueAsNumber)));
+					},
 				},
-			},
-		),
-		`(${targetDate.toLocaleString(undefined, {weekday: 'short'})})`,
-		'～',
-		// TODO: 範囲指定可能にする
-		createElement('br'),
-		`勤務時間Total: ${Formats.seconds(totalWorkTimeSeconds)}`,
-		createElement('br'),
-		createElement(
-			Checkbox, {
-				checked: isDetailVisible,
-				onChange: setDetailVisible,
-			},
-			'詳細を表示する',
-		),
-		createElement(
-			Checkbox, {
-				checked: hideNoTitleOrMemo,
-				onChange: setHideNoTitleOrMemo,
-				disabled: !isDetailVisible,
-			},
-			'タイトル・メモが存在しないものは省略',
+			),
+			`(${targetDate.toLocaleString(undefined, {weekday: 'short'})})`,
+			'～',
+			// TODO: 範囲指定可能にする
+			createElement('br'),
+			`勤務時間Total: ${Formats.seconds(totalWorkTimeSeconds)}`,
+			createElement('br'),
+			createElement(
+				Checkbox, {
+					checked: isDetailVisible,
+					onChange: setDetailVisible,
+				},
+				'詳細を表示する',
+			),
+			createElement(
+				Checkbox, {
+					checked: hideNoTitleOrMemo,
+					onChange: setHideNoTitleOrMemo,
+					disabled: !isDetailVisible,
+				},
+				'タイトル・メモが存在しないものは省略',
+			),
 		),
 		createElement('ul', {}, [...grouped.entries()].map(([type, records]) => {
 			const workTimeSeconds = records.map(record => record.workTimeSeconds).reduce((a, b) => a + b, 0);
