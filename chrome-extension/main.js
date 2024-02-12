@@ -430,6 +430,11 @@ const typesToNamesWithCurrent = (types, current) => {
 	return names.includes(current) ? names : [current, ...names];
 };
 
+const defaultTodoGroups = [
+	'対応待ち',
+	'template',
+];
+
 const defaultTypes = [{
 	name: 'メールチェック',
 }, {
@@ -479,6 +484,13 @@ const App = () => {
 		save: saveType,
 	} = useStorageList('type', {
 		defaultValue: defaultTypes,
+	});
+	const {
+		allList: todoGroups,
+		add: addTodoGroup,
+		save: saveTodoGroup,
+	} = useStorageList('todo-group', {
+		defaultValue: defaultTodoGroups,
 	});
 	const [newType, setNewType] = useState('');
 
