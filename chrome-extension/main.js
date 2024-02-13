@@ -843,6 +843,7 @@ const App = () => {
 			),
 			(() => {
 				const createList = (list) => {
+					if (list.length === 0) return createElement('ul', {}, createElement('li', {}, 'ToDoなし'));
 					return createElement('ul', {}, list.map((todo, i) => {
 						const isCurrent = (todo.type === currentRecord?.type) && ((todo.title || '') === (currentRecord?.title || ''));
 						const className = isCurrent ? 'current' : undefined;
