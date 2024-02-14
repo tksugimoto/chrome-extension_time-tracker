@@ -324,6 +324,145 @@ const RecordView = ({
 	);
 };
 
+const groupNothingName = '(グループなし)';
+
+/** @typedef {{
+ * 	type: string;
+ * 	title: string;
+ * 	memo?: string;
+ * 	group?: string;
+ * }} Todo */
+
+/**
+ * @param {{
+ * 	todo: Todo;
+ * 	isTodoEditMode: boolean;
+ * 	usingTodoGroup: boolean;
+ * 	todos: Todo[],
+ * 	todoGroups: string[],
+ * 	saveTodo: function(): void
+ * 	finishAndAddRecord: function(TimeRecord | Todo): void
+ * 	types: {name: string}[];
+ * 	todoWorkTimes: {total: number}[];
+ * }} param0
+ * @returns
+ */
+const TodoRow = ({
+	todo,
+	isTodoEditMode,
+	usingTodoGroup,
+	todos,
+	todoGroups,
+	saveTodo,
+	finishAndAddRecord,
+	types,
+	todoWorkTimes,
+}) => {
+	const hasUrlMemo = !!todo.memo?.match(/^http[^ ]+$/);
+	const i = todos.indexOf(todo);
+	return createElement(
+		React.Fragment,
+		{},
+		isTodoEditMode && createElement(
+			'button',
+			{
+				onClick: () => {
+					const desc = todo.title || todo.memo || '-';
+					const message = `「${todo.type}(${desc})」を削除しますか？`;
+					if (window.confirm(message)) {
+						// FIXME: mutableをやめる
+						// todos.toSpliced が使える
+						todos.splice(i, 1);
+						saveTodo();
+					}
+				},
+			},
+			'削除',
+		),
+		(usingTodoGroup && isTodoEditMode) && createElement(
+			'select',
+			{
+				value: todoGroups.includes(todo.group ?? '') ? todo.group : '',
+				onChange: e => {
+					// FIXME: mutableをやめる
+					todo.group = e.target.value || undefined;
+					saveTodo();
+				},
+			},
+			[...todoGroups, ''].map((todoGroup, i) => {
+				return createElement('option', {
+					key: i,
+					value: todoGroup,
+				}, todoGroup || groupNothingName);
+			}),
+		),
+		createElement(
+			'button',
+			{
+				onClick: () => {
+					finishAndAddRecord(todo);
+				},
+				style: {
+					userSelect: 'none', // TODO listをコピーしやすくするため
+				},
+			},
+			'開始',
+		),
+		` [${Formats.seconds(todoWorkTimes[i].total)}] `,
+		isTodoEditMode ? createElement(
+			'select',
+			{
+				value: todo.type,
+				onChange: e => {
+					// FIXME: mutableをやめる
+					todo.type = e.target.value;
+					saveTodo();
+				},
+			},
+			typesToNamesWithCurrent(types, todo.type).map((type, i) => {
+				return createElement('option', {
+					key: i,
+					value: type,
+				}, type);
+			}),
+		) : todo.type,
+		isTodoEditMode ? createElement(
+			'input',
+			{
+				value: todo.title,
+				placeholder: 'タイトル',
+				size: titleSize,
+				onChange: e => {
+					// FIXME: mutableをやめる
+					todo.title = e.target.value;
+					saveTodo();
+				},
+			},
+		) : (
+			hasUrlMemo ? createElement(
+				'a',
+				{
+					href: todo.memo,
+					target: '_blank',
+				},
+				`(${todo.title || todo.memo})`, // TODO: 区切り()がリンクになって統一感がない問題に対応≒区切りを()から変更
+			) : `(${todo.title || '-'})`
+		),
+		isTodoEditMode ? createElement(
+			'input',
+			{
+				value: todo.memo,
+				placeholder: 'メモ / URL',
+				onChange: e => {
+					// FIXME: mutableをやめる
+					todo.memo = e.target.value;
+					saveTodo();
+				},
+			},
+		) : hasUrlMemo ? '' : todo.memo,
+	);
+};
+
 /**
  *
  * @param {import("react").PropsWithChildren<{
@@ -430,6 +569,11 @@ const typesToNamesWithCurrent = (types, current) => {
 	return names.includes(current) ? names : [current, ...names];
 };
 
+const defaultTodoGroups = [
+	'対応待ち',
+	'template',
+];
+
 const defaultTypes = [{
 	name: 'メールチェック',
 }, {
@@ -472,6 +616,7 @@ const App = () => {
 	const [newTodoType, setNewTodoType] = useState('');
 	const [newTodoTitle, setNewTodoTitle] = useState('');
 	const [newTodoMemo, setNewTodoMemo] = useState('');
+	const [newTodoGroup, setNewTodoGroup] = useState('');
 
 	const {
 		allList: types,
@@ -479,6 +624,13 @@ const App = () => {
 		save: saveType,
 	} = useStorageList('type', {
 		defaultValue: defaultTypes,
+	});
+	const {
+		allList: todoGroups,
+		add: addTodoGroup,
+		save: saveTodoGroup,
+	} = useStorageList('todo-group', {
+		defaultValue: defaultTodoGroups,
 	});
 	const [newType, setNewType] = useState('');
 
@@ -494,6 +646,7 @@ const App = () => {
 	const [isTypeEditMode, setTypeEditMode] = useState(false);
 	const [isTodoEditMode, setTodoEditMode] = useState(false);
 	const [isInputToDoFromClipboardEnabled, setInputToDoFromClipboardEnabled] = useSetting('clipboard-to-todo', false);
+	const [usingTodoGroup, setTodoGroup] = useSetting('use-todo-group', false);
 	const [isDetailVisible, setDetailVisible] = useSetting('detail-visible', false);
 	const [hideNoTitleOrMemo, setHideNoTitleOrMemo] = useSetting('no-title_or_memo', true);
 
@@ -681,99 +834,103 @@ const App = () => {
 				},
 				'クリップボードを貼り付けでToDoを入力する',
 			),
-			createElement('ul', {}, todos.map((todo, i) => {
-				const isCurrent = (todo.type === currentRecord?.type) && ((todo.title || '') === (currentRecord?.title || ''));
-				const hasUrlMemo = !!todo.memo?.match(/^http[^ ]+$/);
-				const className = isCurrent ? 'current' : undefined;
-				return createElement(
-					'li',
-					{
-						key: i,
-						className,
-					},
-					isTodoEditMode && createElement(
-						'button',
-						{
-							onClick: () => {
-								const desc = todo.title || todo.memo || '-';
-								const message = `「${todo.type}(${desc})」を削除しますか？`;
-								if (window.confirm(message)) {
-									// FIXME: mutableをやめる
-									// todos.toSpliced が使える
-									todos.splice(i, 1);
-									saveTodo();
-								}
-							},
-						},
-						'削除',
-					),
-					createElement(
-						'button',
-						{
-							onClick: () => {
-								finishAndAddRecord(todo);
-							},
-							style: {
-								userSelect: 'none', // TODO listをコピーしやすくするため
-							},
-						},
-						'開始',
-					),
-					` [${Formats.seconds(todoWorkTimes[i].total)}] `,
-					isTodoEditMode ? createElement(
-						'select',
-						{
-							value: todo.type,
-							onChange: e => {
-								// FIXME: mutableをやめる
-								todo.type = e.target.value;
-								saveTodo();
-							},
-						},
-						typesToNamesWithCurrent(types, todo.type).map((type, i) => {
-							return createElement('option', {
-								key: i,
-								value: type,
-							}, type);
-						}),
-					) : todo.type,
-					isTodoEditMode ? createElement(
-						'input',
-						{
-							value: todo.title,
-							placeholder: 'タイトル',
-							size: titleSize,
-							onChange: e => {
-								// FIXME: mutableをやめる
-								todo.title = e.target.value;
-								saveTodo();
-							},
-						},
-					) : (
-						hasUrlMemo ? createElement(
-							'a',
+			createElement(
+				Checkbox, {
+					checked: usingTodoGroup,
+					onChange: setTodoGroup,
+				},
+				'グループで管理する',
+			),
+			(() => {
+				const createList = (list) => {
+					if (list.length === 0) return createElement('ul', {}, createElement('li', {}, 'ToDoなし'));
+					return createElement('ul', {}, list.map((todo, i) => {
+						const isCurrent = (todo.type === currentRecord?.type) && ((todo.title || '') === (currentRecord?.title || ''));
+						const className = isCurrent ? 'current' : undefined;
+						return createElement(
+							'li',
 							{
-								href: todo.memo,
-								target: '_blank',
+								key: i,
+								className,
 							},
-							`(${todo.title || todo.memo})`, // TODO: 区切り()がリンクになって統一感がない問題に対応≒区切りを()から変更
-						) : `(${todo.title || '-'})`
-					),
-					isTodoEditMode ? createElement(
-						'input',
-						{
-							value: todo.memo,
-							placeholder: 'メモ / URL',
-							onChange: e => {
-								// FIXME: mutableをやめる
-								todo.memo = e.target.value;
-								saveTodo();
-							},
-						},
-					) : hasUrlMemo ? '' : todo.memo,
-				);
-			})),
+							createElement(
+								TodoRow,
+								{
+									todo,
+									isTodoEditMode,
+									usingTodoGroup,
+									todos,
+									todoGroups,
+									saveTodo,
+									finishAndAddRecord,
+									types,
+									todoWorkTimes,
+								},
+							),
+						);
+					}));
+				};
+				if (usingTodoGroup) {
+					const groupNothingValue = undefined;
+					// @ts-expect-error TS2339: Property 'groupBy' does not exist on type 'MapConstructor'.
+					// もうすぐ型定義が追加される https://github.com/microsoft/TypeScript/pull/56805
+					const groupdMap = Map.groupBy(todos, (({group}) => todoGroups.includes(group) ? group : groupNothingValue));
+					return createElement(
+						React.Fragment,
+						{},
+						[...todoGroups, groupNothingValue].map((group, groupIndex) => {
+							return createElement(
+								React.Fragment,
+								{
+									key: groupIndex,
+								},
+								createElement(
+									'h3',
+									{},
+									group === groupNothingValue ? groupNothingName : group,
+									(isTodoEditMode && group !== groupNothingValue) && createElement('button', {
+										onClick: () => {
+											if (window.confirm(`グループ「${group}」を削除しますか？`)) {
+												// FIXME: mutableをやめる
+												// types.toSpliced が使える
+												const i = todoGroups.indexOf(group);
+												todoGroups.splice(i, 1);
+												saveTodoGroup();
+											}
+										},
+									}, '削除'),
+								),
+								createList(groupdMap.get(group) ?? []),
+							);
+						}),
+					);
+				}
+				return createList(todos);
+			})(),
 			'※ ToDoごとの経過時間の集計には分類・タイトルのみを使用し、メモ / URLの違いを無視する',
+			(isTodoEditMode && usingTodoGroup) && createElement(
+				'form',
+				{
+					onSubmit: e => {
+						if (!todoGroups.includes(newTodoGroup)) {
+							addTodoGroup(newTodoGroup);
+						}
+						e.preventDefault();
+					},
+				},
+				createElement(
+					'input',
+					{
+						required: true,
+						value: newTodoGroup,
+						placeholder: 'グループ',
+						onChange: e => {
+							setNewTodoGroup(e.target.value);
+						},
+					},
+				),
+				createElement('button', {}, 'グループ追加'),
+			),
 			isTodoEditMode && createElement(
 				'form',
 				{
