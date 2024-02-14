@@ -522,7 +522,10 @@ const App = () => {
 	const usedAccessKeys = useMemo(() => {
 		return types.map(type => type.accessKey).filter(Boolean).flatMap(c => {
 			// アクセスキーは大文字小文字を区別しない
-			return [c.toLowerCase(), c.toUpperCase()];
+			const L = c.toLowerCase();
+			const U = c.toUpperCase();
+			if (L === U) return [L];
+			return [L, U];
 		});
 	}, [types]);
 
