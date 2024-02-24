@@ -348,6 +348,7 @@ const groupNothingName = '(グループなし)';
  * 	todo: Todo;
  * 	isTodoEditMode: boolean;
  * 	usingTodoGroup: boolean;
+ * 	usingTodoDeadline: boolean;
  * 	todos: Todo[],
  * 	todoGroups: string[],
  * 	saveTodo: function(): void
@@ -361,6 +362,7 @@ const TodoRow = ({
 	todo,
 	isTodoEditMode,
 	usingTodoGroup,
+	usingTodoDeadline,
 	todos,
 	todoGroups,
 	saveTodo,
@@ -418,8 +420,7 @@ const TodoRow = ({
 			},
 			'開始',
 		),
-		// TODO: 期限を管理するオプション追加
-		isTodoEditMode ? createElement(
+		usingTodoDeadline && (isTodoEditMode ? createElement(
 			'input',
 			{
 				type: 'date',
@@ -433,7 +434,7 @@ const TodoRow = ({
 					saveTodo();
 				},
 			},
-		) : todo.deadline && `(-${Formats.localeDeadlineDateString(todo.deadline)})`, // TODO: 期限が過ぎた/近い場合に強調表示する
+		) : todo.deadline && `(-${Formats.localeDeadlineDateString(todo.deadline)})`), // TODO: 期限が過ぎた/近い場合に強調表示する
 		` [${Formats.seconds(todoWorkTimes[i].total)}] `,
 		isTodoEditMode ? createElement(
 			'select',
@@ -673,6 +674,7 @@ const App = () => {
 	const [isTodoEditMode, setTodoEditMode] = useState(false);
 	const [isInputToDoFromClipboardEnabled, setInputToDoFromClipboardEnabled] = useSetting('clipboard-to-todo', false);
 	const [usingTodoGroup, setTodoGroup] = useSetting('use-todo-group', false);
+	const [usingTodoDeadline, setTodoDeadline] = useSetting('use-todo-deadline', false);
 	const [isDetailVisible, setDetailVisible] = useSetting('detail-visible', false);
 	const [hideNoTitleOrMemo, setHideNoTitleOrMemo] = useSetting('no-title_or_memo', true);
 
@@ -867,6 +869,13 @@ const App = () => {
 				},
 				'グループで管理する',
 			),
+			createElement(
+				Checkbox, {
+					checked: usingTodoDeadline,
+					onChange: setTodoDeadline,
+				},
+				'期限を管理する',
+			),
 			(() => {
 				const createList = (list) => {
 					if (list.length === 0) return createElement('ul', {}, createElement('li', {}, 'ToDoなし'));
@@ -885,6 +894,7 @@ const App = () => {
 									todo,
 									isTodoEditMode,
 									usingTodoGroup,
+									usingTodoDeadline,
 									todos,
 									todoGroups,
 									saveTodo,
