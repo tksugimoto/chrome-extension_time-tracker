@@ -434,7 +434,9 @@ const TodoRow = ({
 					saveTodo();
 				},
 			},
-		) : todo.deadline && `(-${Formats.localeDeadlineDateString(todo.deadline)})`), // TODO: 期限が過ぎた/近い場合に強調表示する
+		) : todo.deadline && createElement('span', {
+			className: todo.deadline < Date.now() ? 'expired-deadline' : todo.deadline < (Date.now() + 3 * 24 * 60 * 60 * 1000) ? 'close-to-deadline' : null,
+		}, `(-${Formats.localeDeadlineDateString(todo.deadline)})`)),
 		` [${Formats.seconds(todoWorkTimes[i].total)}] `,
 		isTodoEditMode ? createElement(
 			'select',
