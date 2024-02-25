@@ -97,12 +97,21 @@ const Formats = {
 		minimumFractionDigits: 2,
 		maximumFractionDigits: 2,
 	}),
+	/**
+	 * @param {number} num
+	 */
 	percent(num) {
 		return this._percentFormat.format(num);
 	},
+	/**
+	 * @param {number} num
+	 */
 	padStart0(num) {
 		return num.toString().padStart(2, '0');
 	},
+	/**
+	 * @param {number} time
+	 */
 	seconds(time) {
 		const seconds = time % 60;
 		const minutes = Math.floor(time / 60) % 60;
@@ -111,6 +120,9 @@ const Formats = {
 		if (minutes) return `${this.padStart0(minutes)}分${this.padStart0(seconds)}秒`;
 		return `${this.padStart0(seconds)}秒`;
 	},
+	/**
+	 * @param {Date} date
+	 */
 	ISODateString(date) {
 		return new Date(date.getTime() - (date.getTimezoneOffset() * 60000 )).toISOString().replace(/T.*/, '');
 	},
@@ -341,7 +353,20 @@ const groupNothingName = '(グループなし)';
  * 	memo?: string;
  * 	group?: string;
  * 	deadline?: number;
+ * 	estimation?: string;
  * }} Todo */
+
+/**
+ * @param {Todo} todo
+ * @param {number} todoWorkTimeTatal
+ * @returns
+ */
+const calculateRemainingTime = (todo, todoWorkTimeTatal) => {
+	if (!todo.estimation) return 0;
+	const estimationSeconds = Number(todo.estimation) * 60 * 60;
+	if (todoWorkTimeTatal > estimationSeconds) return 0;
+	return estimationSeconds - todoWorkTimeTatal;
+};
 
 /**
  * @param {{
@@ -349,12 +374,13 @@ const groupNothingName = '(グループなし)';
  * 	isTodoEditMode: boolean;
  * 	usingTodoGroup: boolean;
  * 	usingTodoDeadline: boolean;
+ * 	usingTodoEstimation: boolean;
  * 	todos: Todo[],
  * 	todoGroups: string[],
  * 	saveTodo: function(): void
  * 	finishAndAddRecord: function(TimeRecord | Todo): void
  * 	types: {name: string}[];
- * 	todoWorkTimes: {total: number}[];
+ * 	todoWorkTimeTatal: number;
  * }} param0
  * @returns
  */
@@ -363,12 +389,13 @@ const TodoRow = ({
 	isTodoEditMode,
 	usingTodoGroup,
 	usingTodoDeadline,
+	usingTodoEstimation,
 	todos,
 	todoGroups,
 	saveTodo,
 	finishAndAddRecord,
 	types,
-	todoWorkTimes,
+	todoWorkTimeTatal,
 }) => {
 	const hasUrlMemo = !!todo.memo?.match(/^http[^ ]+$/);
 	const i = todos.indexOf(todo);
@@ -437,7 +464,27 @@ const TodoRow = ({
 		) : todo.deadline && createElement('span', {
 			className: todo.deadline < Date.now() ? 'expired-deadline' : todo.deadline < (Date.now() + 3 * 24 * 60 * 60 * 1000) ? 'close-to-deadline' : null,
 		}, `(-${Formats.localeDeadlineDateString(todo.deadline)})`)),
-		` [${Formats.seconds(todoWorkTimes[i].total)}] `,
+		` [${Formats.seconds(todoWorkTimeTatal)}`,
+		usingTodoEstimation && createElement(React.Fragment, {},
+			' / ',
+			isTodoEditMode && createElement('input', {
+				type: 'text',
+				value: todo.estimation,
+				placeholder: '見積もり',
+				size: 4,
+				onChange: e => {
+					// FIXME: mutableをやめる
+					const value = e.target.value;
+					const num = Number(value);
+					todo.estimation = Number.isNaN(num) || num < 0 ? undefined : value;
+					saveTodo();
+				},
+			}),
+			isTodoEditMode && '時間',
+			!isTodoEditMode && Formats.seconds(todo.estimation ? Number(todo.estimation) * 60 * 60 : 0),
+			todo.estimation && ` (${Formats.percent(todoWorkTimeTatal / (Number(todo.estimation) * 60 * 60))})`,
+		),
+		'] ',
 		isTodoEditMode ? createElement(
 			'select',
 			{
@@ -678,6 +725,7 @@ const App = () => {
 	const [isInputToDoFromClipboardEnabled, setInputToDoFromClipboardEnabled] = useSetting('clipboard-to-todo', false);
 	const [usingTodoGroup, setTodoGroup] = useSetting('use-todo-group', false);
 	const [usingTodoDeadline, setTodoDeadline] = useSetting('use-todo-deadline', false);
+	const [usingTodoEstimation, setTodoEstimation] = useSetting('use-todo-estimation', false);
 	const [isDetailVisible, setDetailVisible] = useSetting('detail-visible', false);
 	const [hideNoTitleOrMemo, setHideNoTitleOrMemo] = useSetting('no-title_or_memo', true);
 	const [isAggregationVisible, setAggregationVisible] = useSetting('aggregation-visible', false);
@@ -880,10 +928,19 @@ const App = () => {
 				},
 				'期限を管理する',
 			),
+			createElement(
+				Checkbox, {
+					checked: usingTodoEstimation,
+					onChange: setTodoEstimation,
+				},
+				'見積もりを管理する',
+			),
 			(() => {
 				const createList = (list) => {
 					if (list.length === 0) return createElement('ul', {}, createElement('li', {}, 'ToDoなし'));
-					return createElement('ul', {}, list.map((todo, i) => {
+					return createElement('ul', {}, list.map((todo) => {
+						const i = todos.indexOf(todo);
+						const todoWorkTimeTatal = todoWorkTimes[i].total;
 						const isCurrent = (todo.type === currentRecord?.type) && ((todo.title || '') === (currentRecord?.title || ''));
 						const className = isCurrent ? 'current' : undefined;
 						return createElement(
@@ -899,12 +956,13 @@ const App = () => {
 									isTodoEditMode,
 									usingTodoGroup,
 									usingTodoDeadline,
+									usingTodoEstimation,
 									todos,
 									todoGroups,
 									saveTodo,
 									finishAndAddRecord,
 									types,
-									todoWorkTimes,
+									todoWorkTimeTatal,
 								},
 							),
 						);
@@ -948,6 +1006,15 @@ const App = () => {
 				return createList(todos);
 			})(),
 			'※ ToDoごとの経過時間の集計には分類・タイトルのみを使用し、メモ / URLの違いを無視する',
+			// TODO: 表示方法調整(グループ別対応？)
+			usingTodoEstimation && createElement(
+				'p',
+				{},
+				'残り時間: ',
+				Formats.seconds(todoWorkTimes.reduce((acc, {todo, total}) => {
+					return acc + calculateRemainingTime(todo, total);
+				}, 0)),
+			),
 			(isTodoEditMode && usingTodoGroup) && createElement(
 				'form',
 				{
