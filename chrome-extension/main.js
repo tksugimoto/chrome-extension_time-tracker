@@ -415,6 +415,18 @@ const groupNothingName = '(グループなし)';
  * }} TodoWorkTime */
 
 /**
+ * @param {Todo} todo
+ * @param {number} todoWorkTimeTatal
+ * @returns
+ */
+const calculateRemainingTime = (todo, todoWorkTimeTatal) => {
+	if (!todo.estimation) return 0;
+	const estimationSeconds = Number(todo.estimation) * 60 * 60;
+	if (todoWorkTimeTatal > estimationSeconds) return 0;
+	return estimationSeconds - todoWorkTimeTatal;
+};
+
+/**
  * @param {{
  * 	todo: Todo;
  * 	isTodoEditMode: boolean;
@@ -1170,6 +1182,28 @@ const App = () => {
 				return createList(todos);
 			})(),
 			'※ ToDoごとの経過時間の集計には分類・タイトルのみを使用し、メモ / URLの違いを無視する',
+			// TODO: 表示方法調整(グループ別対応？)
+			usingTodoEstimation && createElement(
+				'p',
+				{},
+				'残り時間: ',
+				Formats.seconds(todoWorkTimes.reduce((acc, {todo, total}) => {
+					return acc + calculateRemainingTime(todo, total);
+				}, 0)),
+			),
+			usingTodoEstimation && createElement(
+				'ul',
+				{},
+				// @ts-expect-error TS2339: Property 'groupBy' does not exist on type 'MapConstructor'.
+				// もうすぐ型定義が追加される https://github.com/microsoft/TypeScript/pull/56805
+				[...Map.groupBy(todoWorkTimes, ({todo}) => todo.type).entries()].map(([type, sameTypeTodoWorkTimes]) => {
+					const remainTime = sameTypeTodoWorkTimes.reduce((acc, {todo, total}) => {
+						return acc + calculateRemainingTime(todo, total);
+					}, 0);
+					if (!remainTime) return null;
+					return createElement('li', {key: type}, `${type}: ${Formats.seconds(remainTime)}`);
+				}),
+			),
 			(isTodoEditMode && usingTodoGroup) && createElement(
 				'form',
 				{
