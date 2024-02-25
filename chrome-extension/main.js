@@ -97,12 +97,21 @@ const Formats = {
 		minimumFractionDigits: 2,
 		maximumFractionDigits: 2,
 	}),
+	/**
+	 * @param {number} num
+	 */
 	percent(num) {
 		return this._percentFormat.format(num);
 	},
+	/**
+	 * @param {number} num
+	 */
 	padStart0(num) {
 		return num.toString().padStart(2, '0');
 	},
+	/**
+	 * @param {number} time
+	 */
 	seconds(time) {
 		const seconds = time % 60;
 		const minutes = Math.floor(time / 60) % 60;
@@ -111,6 +120,9 @@ const Formats = {
 		if (minutes) return `${this.padStart0(minutes)}分${this.padStart0(seconds)}秒`;
 		return `${this.padStart0(seconds)}秒`;
 	},
+	/**
+	 * @param {Date} date
+	 */
 	ISODateString(date) {
 		return new Date(date.getTime() - (date.getTimezoneOffset() * 60000 )).toISOString().replace(/T.*/, '');
 	},
