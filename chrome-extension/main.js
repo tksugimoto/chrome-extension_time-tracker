@@ -366,7 +366,7 @@ const groupNothingName = '(グループなし)';
  * 	saveTodo: function(): void
  * 	finishAndAddRecord: function(TimeRecord | Todo): void
  * 	types: {name: string}[];
- * 	todoWorkTimes: {total: number}[];
+ * 	todoWorkTimeTatal: number;
  * }} param0
  * @returns
  */
@@ -380,7 +380,7 @@ const TodoRow = ({
 	saveTodo,
 	finishAndAddRecord,
 	types,
-	todoWorkTimes,
+	todoWorkTimeTatal,
 }) => {
 	const hasUrlMemo = !!todo.memo?.match(/^http[^ ]+$/);
 	const i = todos.indexOf(todo);
@@ -449,7 +449,7 @@ const TodoRow = ({
 		) : todo.deadline && createElement('span', {
 			className: todo.deadline < Date.now() ? 'expired-deadline' : todo.deadline < (Date.now() + 3 * 24 * 60 * 60 * 1000) ? 'close-to-deadline' : null,
 		}, `(-${Formats.localeDeadlineDateString(todo.deadline)})`)),
-		` [${Formats.seconds(todoWorkTimes[i].total)}] `,
+		` [${Formats.seconds(todoWorkTimeTatal)}] `,
 		isTodoEditMode ? createElement(
 			'select',
 			{
@@ -893,7 +893,9 @@ const App = () => {
 			(() => {
 				const createList = (list) => {
 					if (list.length === 0) return createElement('ul', {}, createElement('li', {}, 'ToDoなし'));
-					return createElement('ul', {}, list.map((todo, i) => {
+					return createElement('ul', {}, list.map((todo) => {
+						const i = todos.indexOf(todo);
+						const todoWorkTimeTatal = todoWorkTimes[i].total;
 						const isCurrent = (todo.type === currentRecord?.type) && ((todo.title || '') === (currentRecord?.title || ''));
 						const className = isCurrent ? 'current' : undefined;
 						return createElement(
@@ -914,7 +916,7 @@ const App = () => {
 									saveTodo,
 									finishAndAddRecord,
 									types,
-									todoWorkTimes,
+									todoWorkTimeTatal,
 								},
 							),
 						);
