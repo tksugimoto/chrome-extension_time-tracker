@@ -353,6 +353,7 @@ const groupNothingName = '(グループなし)';
  * 	memo?: string;
  * 	group?: string;
  * 	deadline?: number;
+ * 	estimation?: string;
  * }} Todo */
 
 /**
@@ -361,6 +362,7 @@ const groupNothingName = '(グループなし)';
  * 	isTodoEditMode: boolean;
  * 	usingTodoGroup: boolean;
  * 	usingTodoDeadline: boolean;
+ * 	usingTodoEstimation: boolean;
  * 	todos: Todo[],
  * 	todoGroups: string[],
  * 	saveTodo: function(): void
@@ -375,6 +377,7 @@ const TodoRow = ({
 	isTodoEditMode,
 	usingTodoGroup,
 	usingTodoDeadline,
+	usingTodoEstimation,
 	todos,
 	todoGroups,
 	saveTodo,
@@ -449,7 +452,27 @@ const TodoRow = ({
 		) : todo.deadline && createElement('span', {
 			className: todo.deadline < Date.now() ? 'expired-deadline' : todo.deadline < (Date.now() + 3 * 24 * 60 * 60 * 1000) ? 'close-to-deadline' : null,
 		}, `(-${Formats.localeDeadlineDateString(todo.deadline)})`)),
-		` [${Formats.seconds(todoWorkTimeTatal)}] `,
+		` [${Formats.seconds(todoWorkTimeTatal)}`,
+		usingTodoEstimation && createElement(React.Fragment, {},
+			' / ',
+			isTodoEditMode && createElement('input', {
+				type: 'text',
+				value: todo.estimation,
+				placeholder: '見積もり',
+				size: 4,
+				onChange: e => {
+					// FIXME: mutableをやめる
+					const value = e.target.value;
+					const num = Number(value);
+					todo.estimation = Number.isNaN(num) || num < 0 ? undefined : value;
+					saveTodo();
+				},
+			}),
+			isTodoEditMode && '時間',
+			!isTodoEditMode && Formats.seconds(todo.estimation ? Number(todo.estimation) * 60 * 60 : 0),
+			todo.estimation && ` (${Formats.percent(todoWorkTimeTatal / (Number(todo.estimation) * 60 * 60))})`,
+		),
+		'] ',
 		isTodoEditMode ? createElement(
 			'select',
 			{
@@ -689,6 +712,7 @@ const App = () => {
 	const [isInputToDoFromClipboardEnabled, setInputToDoFromClipboardEnabled] = useSetting('clipboard-to-todo', false);
 	const [usingTodoGroup, setTodoGroup] = useSetting('use-todo-group', false);
 	const [usingTodoDeadline, setTodoDeadline] = useSetting('use-todo-deadline', false);
+	const [usingTodoEstimation, setTodoEstimation] = useSetting('use-todo-estimation', false);
 	const [isDetailVisible, setDetailVisible] = useSetting('detail-visible', false);
 	const [hideNoTitleOrMemo, setHideNoTitleOrMemo] = useSetting('no-title_or_memo', true);
 
@@ -890,6 +914,13 @@ const App = () => {
 				},
 				'期限を管理する',
 			),
+			createElement(
+				Checkbox, {
+					checked: usingTodoEstimation,
+					onChange: setTodoEstimation,
+				},
+				'見積もりを管理する',
+			),
 			(() => {
 				const createList = (list) => {
 					if (list.length === 0) return createElement('ul', {}, createElement('li', {}, 'ToDoなし'));
@@ -911,6 +942,7 @@ const App = () => {
 									isTodoEditMode,
 									usingTodoGroup,
 									usingTodoDeadline,
+									usingTodoEstimation,
 									todos,
 									todoGroups,
 									saveTodo,
