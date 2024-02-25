@@ -117,6 +117,15 @@ const Formats = {
 	/**
 	 * @param {number} timestampMs
 	 */
+	localeDeadlineDateString(timestampMs) {
+		return new Date(timestampMs).toLocaleString(undefined, {
+			month: '2-digit',
+			day: '2-digit',
+		});
+	},
+	/**
+	 * @param {number} timestampMs
+	 */
 	localeDateTimeString(timestampMs) {
 		return new Date(timestampMs).toLocaleString(undefined, {
 			year: 'numeric',
@@ -331,6 +340,7 @@ const groupNothingName = '(グループなし)';
  * 	title: string;
  * 	memo?: string;
  * 	group?: string;
+ * 	deadline?: number;
  * }} Todo */
 
 /**
@@ -338,6 +348,7 @@ const groupNothingName = '(グループなし)';
  * 	todo: Todo;
  * 	isTodoEditMode: boolean;
  * 	usingTodoGroup: boolean;
+ * 	usingTodoDeadline: boolean;
  * 	todos: Todo[],
  * 	todoGroups: string[],
  * 	saveTodo: function(): void
@@ -351,6 +362,7 @@ const TodoRow = ({
 	todo,
 	isTodoEditMode,
 	usingTodoGroup,
+	usingTodoDeadline,
 	todos,
 	todoGroups,
 	saveTodo,
@@ -408,6 +420,23 @@ const TodoRow = ({
 			},
 			'開始',
 		),
+		usingTodoDeadline && (isTodoEditMode ? createElement(
+			'input',
+			{
+				type: 'date',
+				title: '期限',
+				defaultValue: todo.deadline && Formats.ISODateString(new Date(todo.deadline)),
+				className: todo.deadline && 'has-deadline',
+				onChange: e => {
+					if (e.target.validity.badInput) return;
+					// TODO: 全localeで日付保存が問題ないか確認
+					todo.deadline = e.target.value ? startOfDate(new Date(e.target.valueAsNumber)).getTime() : undefined;
+					saveTodo();
+				},
+			},
+		) : todo.deadline && createElement('span', {
+			className: todo.deadline < Date.now() ? 'expired-deadline' : todo.deadline < (Date.now() + 3 * 24 * 60 * 60 * 1000) ? 'close-to-deadline' : null,
+		}, `(-${Formats.localeDeadlineDateString(todo.deadline)})`)),
 		` [${Formats.seconds(todoWorkTimes[i].total)}] `,
 		isTodoEditMode ? createElement(
 			'select',
@@ -647,6 +676,7 @@ const App = () => {
 	const [isTodoEditMode, setTodoEditMode] = useState(false);
 	const [isInputToDoFromClipboardEnabled, setInputToDoFromClipboardEnabled] = useSetting('clipboard-to-todo', false);
 	const [usingTodoGroup, setTodoGroup] = useSetting('use-todo-group', false);
+	const [usingTodoDeadline, setTodoDeadline] = useSetting('use-todo-deadline', false);
 	const [isDetailVisible, setDetailVisible] = useSetting('detail-visible', false);
 	const [hideNoTitleOrMemo, setHideNoTitleOrMemo] = useSetting('no-title_or_memo', true);
 
@@ -841,6 +871,13 @@ const App = () => {
 				},
 				'グループで管理する',
 			),
+			createElement(
+				Checkbox, {
+					checked: usingTodoDeadline,
+					onChange: setTodoDeadline,
+				},
+				'期限を管理する',
+			),
 			(() => {
 				const createList = (list) => {
 					if (list.length === 0) return createElement('ul', {}, createElement('li', {}, 'ToDoなし'));
@@ -859,6 +896,7 @@ const App = () => {
 									todo,
 									isTodoEditMode,
 									usingTodoGroup,
+									usingTodoDeadline,
 									todos,
 									todoGroups,
 									saveTodo,

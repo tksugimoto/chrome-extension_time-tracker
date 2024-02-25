@@ -25,6 +25,18 @@
 		input:invalid:not([required]) {
 			background-color: red;
 		}
+		input.has-deadline {
+			background-color: cyan;
+		}
+		.close-to-deadline {
+			color: darkorange;
+			text-decoration: underline;
+		}
+		.expired-deadline { /* 期限切れには当日を含む */
+			color: red;
+			text-decoration: underline;
+			font-weight: bold;
+		}
 		.current {
 			background-color: yellow;
 		}
