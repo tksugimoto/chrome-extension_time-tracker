@@ -1015,6 +1015,19 @@ const App = () => {
 					return acc + calculateRemainingTime(todo, total);
 				}, 0)),
 			),
+			usingTodoEstimation && createElement(
+				'ul',
+				{},
+				// @ts-expect-error TS2339: Property 'groupBy' does not exist on type 'MapConstructor'.
+				// もうすぐ型定義が追加される https://github.com/microsoft/TypeScript/pull/56805
+				[...Map.groupBy(todoWorkTimes, ({todo}) => todo.type).entries()].map(([type, sameTypeTodoWorkTimes]) => {
+					const remainTime = sameTypeTodoWorkTimes.reduce((acc, {todo, total}) => {
+						return acc + calculateRemainingTime(todo, total);
+					}, 0);
+					if (!remainTime) return null;
+					return createElement('li', {key: type}, `${type}: ${Formats.seconds(remainTime)}`);
+				}),
+			),
 			(isTodoEditMode && usingTodoGroup) && createElement(
 				'form',
 				{
