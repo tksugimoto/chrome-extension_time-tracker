@@ -7,6 +7,7 @@ const {
 	useCallback,
 	useEffect,
 	useMemo,
+	useRef,
 } = React;
 
 const domParser = new DOMParser();
@@ -655,6 +656,7 @@ const App = () => {
 		save: saveTodo,
 	} = useStorageList('todo');
 	const [newTodoType, setNewTodoType] = useState('');
+	const newTodoTitleRef = useRef();
 	const [newTodoTitle, setNewTodoTitle] = useState('');
 	const [newTodoMemo, setNewTodoMemo] = useState('');
 	const [newTodoGroup, setNewTodoGroup] = useState('');
@@ -708,6 +710,10 @@ const App = () => {
 				} else {
 					setNewTodoTitle(text);
 				}
+				// input要素が描画されてからじゃないとrefに値(要素)が存在しないため、少し待つ
+				setTimeout(() => {
+					newTodoTitleRef.current?.focus();
+				}, 100);
 			});
 		};
 		window.addEventListener('paste', listener);
@@ -1015,6 +1021,7 @@ const App = () => {
 				createElement(
 					'input',
 					{
+						ref: newTodoTitleRef,
 						value: newTodoTitle,
 						placeholder: 'タイトル',
 						size: titleSize,
