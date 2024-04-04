@@ -753,8 +753,8 @@ const App = () => {
 	const [targetDate, setTargetDate] = useState(startOfDate());
 	// @ts-expect-error TS2339: Property 'groupBy' does not exist on type 'MapConstructor'.
 	// もうすぐ型定義が追加される https://github.com/microsoft/TypeScript/pull/56805
-	const grouped = Map.groupBy(allList.filter(record => !is勤務外(record.type) && record.isDateOf(targetDate)), ({type}) => type);
-	const totalWorkTimeSeconds = [...grouped.values()].flatMap(records => records.map(record => record.workTimeSeconds)).reduce((a, b) => a + b, 0);
+	const grouped = Map.groupBy(allList.filter(record => record.isDateOf(targetDate)), ({type}) => type);
+	const totalWorkTimeSeconds = [...grouped.values()].flatMap(records => records.map(record => is勤務外(record.type) ? 0 : record.workTimeSeconds)).reduce((a, b) => a + b, 0);
 
 	useEffect(() => {
 		// TODO: リフレッシュの改善（全体は無駄）
@@ -1064,7 +1064,7 @@ const App = () => {
 		'～',
 		// TODO: 範囲指定可能にする
 		createElement('br'),
-		`Total: ${Formats.seconds(totalWorkTimeSeconds)}`,
+		`勤務時間Total: ${Formats.seconds(totalWorkTimeSeconds)}`,
 		createElement('br'),
 		createElement(
 			Checkbox, {
@@ -1100,7 +1100,7 @@ const App = () => {
 				type,
 				createElement('br'),
 				// TODO: 日付別に集計結果を表示する
-				`[${Formats.percent(workTimeSeconds / totalWorkTimeSeconds)}] ${Formats.seconds(workTimeSeconds)}`,
+				`[${is勤務外(type) ? '勤務外のため割合計算対象外' : Formats.percent(workTimeSeconds / totalWorkTimeSeconds)}] ${Formats.seconds(workTimeSeconds)}`,
 				isDetailVisible && createElement('ol', {}, records.map(record => {
 					if (hideNoTitleOrMemo && !(record.title || record.memo)) return null;
 					return createElement(
