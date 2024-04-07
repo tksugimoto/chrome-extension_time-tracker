@@ -944,11 +944,7 @@ const App = () => {
 
 	const currentRecord = list[list.length - 1];
 
-	const [targetDate, setTargetDate] = useState(() => {
-		const d = startOfDate();
-		d.setFullYear(2023);
-		return d;
-	});
+	const [targetDate, setTargetDate] = useState(startOfDate());
 	// @ts-expect-error TS2339: Property 'groupBy' does not exist on type 'MapConstructor'.
 	// もうすぐ型定義が追加される https://github.com/microsoft/TypeScript/pull/56805
 	const grouped = Map.groupBy(allList.filter(record => record.isDateOf(targetDate)), ({type}) => type);
