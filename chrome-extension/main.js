@@ -353,7 +353,20 @@ const groupNothingName = '(グループなし)';
  * 	memo?: string;
  * 	group?: string;
  * 	deadline?: number;
+ * 	estimation?: string;
  * }} Todo */
+
+/**
+ * @param {Todo} todo
+ * @param {number} todoWorkTimeTatal
+ * @returns
+ */
+const calculateRemainingTime = (todo, todoWorkTimeTatal) => {
+	if (!todo.estimation) return 0;
+	const estimationSeconds = Number(todo.estimation) * 60 * 60;
+	if (todoWorkTimeTatal > estimationSeconds) return 0;
+	return estimationSeconds - todoWorkTimeTatal;
+};
 
 /**
  * @param {{
@@ -361,12 +374,13 @@ const groupNothingName = '(グループなし)';
  * 	isTodoEditMode: boolean;
  * 	usingTodoGroup: boolean;
  * 	usingTodoDeadline: boolean;
+ * 	usingTodoEstimation: boolean;
  * 	todos: Todo[],
  * 	todoGroups: string[],
  * 	saveTodo: function(): void
  * 	finishAndAddRecord: function(TimeRecord | Todo): void
  * 	types: {name: string}[];
- * 	todoWorkTimes: {total: number}[];
+ * 	todoWorkTimeTatal: number;
  * }} param0
  * @returns
  */
@@ -375,12 +389,13 @@ const TodoRow = ({
 	isTodoEditMode,
 	usingTodoGroup,
 	usingTodoDeadline,
+	usingTodoEstimation,
 	todos,
 	todoGroups,
 	saveTodo,
 	finishAndAddRecord,
 	types,
-	todoWorkTimes,
+	todoWorkTimeTatal,
 }) => {
 	const hasUrlMemo = !!todo.memo?.match(/^http[^ ]+$/);
 	const i = todos.indexOf(todo);
@@ -449,7 +464,27 @@ const TodoRow = ({
 		) : todo.deadline && createElement('span', {
 			className: todo.deadline < Date.now() ? 'expired-deadline' : todo.deadline < (Date.now() + 3 * 24 * 60 * 60 * 1000) ? 'close-to-deadline' : null,
 		}, `(-${Formats.localeDeadlineDateString(todo.deadline)})`)),
-		` [${Formats.seconds(todoWorkTimes[i].total)}] `,
+		` [${Formats.seconds(todoWorkTimeTatal)}`,
+		usingTodoEstimation && createElement(React.Fragment, {},
+			' / ',
+			isTodoEditMode && createElement('input', {
+				type: 'text',
+				value: todo.estimation,
+				placeholder: '見積もり',
+				size: 4,
+				onChange: e => {
+					// FIXME: mutableをやめる
+					const value = e.target.value;
+					const num = Number(value);
+					todo.estimation = Number.isNaN(num) || num < 0 ? undefined : value;
+					saveTodo();
+				},
+			}),
+			isTodoEditMode && '時間',
+			!isTodoEditMode && Formats.seconds(todo.estimation ? Number(todo.estimation) * 60 * 60 : 0),
+			todo.estimation && ` (${Formats.percent(todoWorkTimeTatal / (Number(todo.estimation) * 60 * 60))})`,
+		),
+		'] ',
 		isTodoEditMode ? createElement(
 			'select',
 			{
@@ -689,8 +724,10 @@ const App = () => {
 	const [isInputToDoFromClipboardEnabled, setInputToDoFromClipboardEnabled] = useSetting('clipboard-to-todo', false);
 	const [usingTodoGroup, setTodoGroup] = useSetting('use-todo-group', false);
 	const [usingTodoDeadline, setTodoDeadline] = useSetting('use-todo-deadline', false);
+	const [usingTodoEstimation, setTodoEstimation] = useSetting('use-todo-estimation', false);
 	const [isDetailVisible, setDetailVisible] = useSetting('detail-visible', false);
 	const [hideNoTitleOrMemo, setHideNoTitleOrMemo] = useSetting('no-title_or_memo', true);
+	const [isAggregationVisible, setAggregationVisible] = useSetting('aggregation-visible', false);
 
 	useEffect(() => {
 		if (!isInputToDoFromClipboardEnabled) return;
@@ -750,7 +787,11 @@ const App = () => {
 
 	const currentRecord = list[list.length - 1];
 
-	const [targetDate, setTargetDate] = useState(startOfDate());
+	const [targetDate, setTargetDate] = useState(() => {
+		const d = startOfDate();
+		d.setFullYear(2023);
+		return d;
+	});
 	// @ts-expect-error TS2339: Property 'groupBy' does not exist on type 'MapConstructor'.
 	// もうすぐ型定義が追加される https://github.com/microsoft/TypeScript/pull/56805
 	const grouped = Map.groupBy(allList.filter(record => record.isDateOf(targetDate)), ({type}) => type);
@@ -890,10 +931,19 @@ const App = () => {
 				},
 				'期限を管理する',
 			),
+			createElement(
+				Checkbox, {
+					checked: usingTodoEstimation,
+					onChange: setTodoEstimation,
+				},
+				'見積もりを管理する',
+			),
 			(() => {
 				const createList = (list) => {
 					if (list.length === 0) return createElement('ul', {}, createElement('li', {}, 'ToDoなし'));
-					return createElement('ul', {}, list.map((todo, i) => {
+					return createElement('ul', {}, list.map((todo) => {
+						const i = todos.indexOf(todo);
+						const todoWorkTimeTatal = todoWorkTimes[i].total;
 						const isCurrent = (todo.type === currentRecord?.type) && ((todo.title || '') === (currentRecord?.title || ''));
 						const className = isCurrent ? 'current' : undefined;
 						return createElement(
@@ -909,12 +959,13 @@ const App = () => {
 									isTodoEditMode,
 									usingTodoGroup,
 									usingTodoDeadline,
+									usingTodoEstimation,
 									todos,
 									todoGroups,
 									saveTodo,
 									finishAndAddRecord,
 									types,
-									todoWorkTimes,
+									todoWorkTimeTatal,
 								},
 							),
 						);
@@ -958,6 +1009,28 @@ const App = () => {
 				return createList(todos);
 			})(),
 			'※ ToDoごとの経過時間の集計には分類・タイトルのみを使用し、メモ / URLの違いを無視する',
+			// TODO: 表示方法調整(グループ別対応？)
+			usingTodoEstimation && createElement(
+				'p',
+				{},
+				'残り時間: ',
+				Formats.seconds(todoWorkTimes.reduce((acc, {todo, total}) => {
+					return acc + calculateRemainingTime(todo, total);
+				}, 0)),
+			),
+			usingTodoEstimation && createElement(
+				'ul',
+				{},
+				// @ts-expect-error TS2339: Property 'groupBy' does not exist on type 'MapConstructor'.
+				// もうすぐ型定義が追加される https://github.com/microsoft/TypeScript/pull/56805
+				[...Map.groupBy(todoWorkTimes, ({todo}) => todo.type).entries()].map(([type, sameTypeTodoWorkTimes]) => {
+					const remainTime = sameTypeTodoWorkTimes.reduce((acc, {todo, total}) => {
+						return acc + calculateRemainingTime(todo, total);
+					}, 0);
+					if (!remainTime) return null;
+					return createElement('li', {key: type}, `${type}: ${Formats.seconds(remainTime)}`);
+				}),
+			),
 			(isTodoEditMode && usingTodoGroup) && createElement(
 				'form',
 				{
@@ -1081,6 +1154,14 @@ const App = () => {
 			},
 			'タイトル・メモが存在しないものは省略',
 		),
+		createElement('br'),
+		createElement(
+			Checkbox, {
+				checked: isAggregationVisible,
+				onChange: setAggregationVisible,
+			},
+			'同一タイトルで集約',
+		),
 		createElement('ul', {}, [...grouped.entries()].map(([type, records]) => {
 			const workTimeSeconds = records.map(record => record.workTimeSeconds).reduce((a, b) => a + b, 0);
 			return {
@@ -1101,7 +1182,42 @@ const App = () => {
 				createElement('br'),
 				// TODO: 日付別に集計結果を表示する
 				`[${is勤務外(type) ? '勤務外のため割合計算対象外' : Formats.percent(workTimeSeconds / totalWorkTimeSeconds)}] ${Formats.seconds(workTimeSeconds)}`,
-				isDetailVisible && createElement('ol', {}, records.map(record => {
+				isAggregationVisible && createElement(
+					'ul',
+					{},
+					// @ts-expect-error TS2339: Property 'groupBy' does not exist on type 'MapConstructor'.
+					// もうすぐ型定義が追加される https://github.com/microsoft/TypeScript/pull/56805
+					[...Map.groupBy(records, ({title}) => title || '').entries()].map(([title, sameTitleRecords]) => {
+						const sameTitleWorkTimeSeconds = sameTitleRecords.map(record => record.workTimeSeconds).reduce((a, b) => a + b, 0);
+						return {
+							title,
+							sameTitleRecords,
+							sameTitleWorkTimeSeconds,
+						};
+					}).sort((a, b) => {
+						// 降順
+						return b.sameTitleWorkTimeSeconds - a.sameTitleWorkTimeSeconds;
+					}).map(({title, sameTitleRecords, sameTitleWorkTimeSeconds}) => {
+						return createElement(
+							'li',
+							{
+								key: title,
+							},
+							`[${Formats.seconds(sameTitleWorkTimeSeconds)}] ${title}`,
+							isDetailVisible && createElement('ol', {}, sameTitleRecords.map(record => {
+								if (hideNoTitleOrMemo && !(record.title || record.memo)) return null;
+								return createElement(
+									'li',
+									{
+										key: record.start,
+									},
+									createElement(RecordView, {types, record, save, finishAndAddRecord, isEditable: false}),
+								);
+							})),
+						);
+					}),
+				),
+				!isAggregationVisible && isDetailVisible && createElement('ol', {}, records.map(record => {
 					if (hideNoTitleOrMemo && !(record.title || record.memo)) return null;
 					return createElement(
 						'li',
