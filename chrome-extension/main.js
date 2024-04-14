@@ -9,6 +9,17 @@ const {
 	useMemo,
 } = React;
 
+
+/**
+ *
+ * @param {any[]} array
+ * @param {number} index1
+ * @param {number} index2
+ */
+const swap = (array, index1, index2) => {
+	[array[index1], array[index2]] = [array[index2], array[index1]];
+};
+
 const domParser = new DOMParser();
 
 /**
@@ -938,17 +949,35 @@ const App = () => {
 									'h3',
 									{},
 									group === groupNothingValue ? groupNothingName : group,
-									(isTodoEditMode && group !== groupNothingValue) && createElement('button', {
-										onClick: () => {
-											if (window.confirm(`グループ「${group}」を削除しますか？`)) {
+									(isTodoEditMode && group !== groupNothingValue) && createElement(React.Fragment, {},
+										createElement('button', {
+											onClick: () => {
+												if (window.confirm(`グループ「${group}」を削除しますか？`)) {
+													// FIXME: mutableをやめる
+													// types.toSpliced が使える
+													const i = todoGroups.indexOf(group);
+													todoGroups.splice(i, 1);
+													saveTodoGroup();
+												}
+											},
+										}, '削除'),
+										createElement('button', {
+											disabled: groupIndex === 0,
+											onClick: () => {
 												// FIXME: mutableをやめる
-												// types.toSpliced が使える
-												const i = todoGroups.indexOf(group);
-												todoGroups.splice(i, 1);
+												swap(todoGroups, groupIndex, groupIndex - 1);
 												saveTodoGroup();
-											}
-										},
-									}, '削除'),
+											},
+										}, '上へ移動'),
+										createElement('button', {
+											disabled: groupIndex === todoGroups.length - 1,
+											onClick: () => {
+												// FIXME: mutableをやめる
+												swap(todoGroups, groupIndex, groupIndex + 1);
+												saveTodoGroup();
+											},
+										}, '下へ移動'),
+									),
 								),
 								createList(groupdMap.get(group) ?? []),
 							);
