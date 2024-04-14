@@ -938,17 +938,19 @@ const App = () => {
 									'h3',
 									{},
 									group === groupNothingValue ? groupNothingName : group,
-									(isTodoEditMode && group !== groupNothingValue) && createElement('button', {
-										onClick: () => {
-											if (window.confirm(`グループ「${group}」を削除しますか？`)) {
-												// FIXME: mutableをやめる
-												// types.toSpliced が使える
-												const i = todoGroups.indexOf(group);
-												todoGroups.splice(i, 1);
-												saveTodoGroup();
-											}
-										},
-									}, '削除'),
+									(isTodoEditMode && group !== groupNothingValue) && createElement(React.Fragment, {},
+										createElement('button', {
+											onClick: () => {
+												if (window.confirm(`グループ「${group}」を削除しますか？`)) {
+													// FIXME: mutableをやめる
+													// types.toSpliced が使える
+													const i = todoGroups.indexOf(group);
+													todoGroups.splice(i, 1);
+													saveTodoGroup();
+												}
+											},
+										}, '削除'),
+									),
 								),
 								createList(groupdMap.get(group) ?? []),
 							);
