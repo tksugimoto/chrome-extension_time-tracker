@@ -275,6 +275,7 @@ const titleSize = 40;
  * @param {function(TimeRecord): void=} param0.finishAndAddRecord
  * @param {boolean=} param0.isEditable
  * @param {boolean=} param0.hideDate
+ * @param {any=} param0.titleRef // TODO: type定義
  * @returns
  */
 const RecordView = ({
@@ -284,6 +285,7 @@ const RecordView = ({
 	finishAndAddRecord,
 	isEditable = true, // FIXME: 名前の適切化
 	hideDate = false,
+	titleRef,
 }) => {
 	// TODO: 縦位置を揃えたい
 	return createElement(
@@ -311,6 +313,7 @@ const RecordView = ({
 		createElement(
 			'input',
 			{
+				ref: titleRef,
 				value: record.title || '',
 				placeholder: 'タイトル',
 				size: titleSize,
@@ -697,6 +700,7 @@ const escapeCharacterClassMetaChar = char => {
 };
 
 const App = () => {
+	const currentTitleRef = useRef();
 	const {
 		allList: todos,
 		add: addTodo,
@@ -862,6 +866,7 @@ const App = () => {
 							accessKey: type.accessKey,
 							onClick: () => {
 								finishAndAddRecord({type: type.name});
+								currentTitleRef.current?.focus();
 							},
 						},
 						'開始' + (!isTypeEditMode && type.accessKey ? ` (${type.accessKey})` : ''),
@@ -1143,7 +1148,7 @@ const App = () => {
 			),
 		),
 		createElement('h2', {}, '現在'),
-		currentRecord ? createElement(RecordView, {types, record: currentRecord, save, hideDate: true}) : '未開始',
+		currentRecord ? createElement(RecordView, {titleRef: currentTitleRef, types, record: currentRecord, save, hideDate: true}) : '未開始',
 		createElement('h2', {}, '履歴'),
 		createElement('ol', {}, list.map((record) => {
 			return createElement(
