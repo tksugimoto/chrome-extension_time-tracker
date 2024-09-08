@@ -103,6 +103,17 @@ class TimeRecord {
 
 
 const Formats = {
+	_bytesFormat: Intl.NumberFormat('en', {
+		notation: 'compact',
+		style: 'unit',
+		unit: 'byte',
+	}),
+	/**
+	 * @param {number} num
+	 */
+	bytes(num) {
+		return this._bytesFormat.format(num);
+	},
 	_percentFormat: Intl.NumberFormat('default', {
 		style: 'percent',
 		minimumFractionDigits: 2,
