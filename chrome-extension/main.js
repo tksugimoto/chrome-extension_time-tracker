@@ -203,6 +203,24 @@ const saveToStorage = (key, value) => {
 };
 
 /**
+ *
+ * @returns {Promise<{
+ *	bytesInUse: number;
+ *	bytesQuota: number;
+ * }>}
+ */
+const fetchUsage = () => {
+	return new Promise(resolve => {
+		chrome.storage.local.getBytesInUse().then(bytesInUse => {
+			resolve({
+				bytesInUse,
+				bytesQuota: chrome.storage.local.QUOTA_BYTES,
+			});
+		});
+	});
+};
+
+/**
  * @template T
  * @param {string} settingKey
  * @param {T} defaultValue
@@ -736,6 +754,20 @@ const App = () => {
 		return () => window.removeEventListener('paste', listener);
 	}, [isInputToDoFromClipboardEnabled]);
 
+	/** @type{ReturnType<
+	 *  typeof useState<
+	 *   Awaited<
+	 *    ReturnType<
+	 *     typeof fetchUsage
+	 *    >
+	 *   >
+	 *  >
+	 * >} */
+	const [usage, setUsage] = useState();
+	useEffect(() => {
+		fetchUsage().then(setUsage);
+	}, []);
+
 	const usedAccessKeys = useMemo(() => {
 		return types.map(type => type.accessKey).filter(Boolean).flatMap(c => {
 			// アクセスキーは大文字小文字を区別しない
@@ -1153,6 +1185,13 @@ const App = () => {
 				})),
 			);
 		})),
+		createElement('h2', {}, 'Stats'),
+		createElement('ul', {},
+			...[
+				`履歴総数: ${allList.length}`,
+				'ストレージ: ' + (usage ? `${Formats.percent(usage.bytesInUse / usage.bytesQuota)} (${Formats.bytes(usage.bytesInUse)} / ${Formats.bytes(usage.bytesQuota)})` : '計算中'),
+			].map(text => createElement('li', {}, text)),
+		),
 	);
 };
 
