@@ -173,6 +173,17 @@ const Formats = {
 	/**
 	 * @param {number} timestampMs
 	 */
+	localeDateString(timestampMs) {
+		return new Date(timestampMs).toLocaleString(undefined, {
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+			weekday: 'short',
+		});
+	},
+	/**
+	 * @param {number} timestampMs
+	 */
 	localeTimeString(timestampMs) {
 		return new Date(timestampMs).toLocaleTimeString(undefined, {
 			hour: '2-digit',
