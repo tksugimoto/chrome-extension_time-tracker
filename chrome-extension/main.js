@@ -103,6 +103,17 @@ class TimeRecord {
 
 
 const Formats = {
+	_bytesFormat: Intl.NumberFormat('en', {
+		notation: 'compact',
+		style: 'unit',
+		unit: 'byte',
+	}),
+	/**
+	 * @param {number} num
+	 */
+	bytes(num) {
+		return this._bytesFormat.format(num);
+	},
 	_percentFormat: Intl.NumberFormat('default', {
 		style: 'percent',
 		minimumFractionDigits: 2,
@@ -162,6 +173,17 @@ const Formats = {
 	/**
 	 * @param {number} timestampMs
 	 */
+	localeDateString(timestampMs) {
+		return new Date(timestampMs).toLocaleString(undefined, {
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+			weekday: 'short',
+		});
+	},
+	/**
+	 * @param {number} timestampMs
+	 */
 	localeTimeString(timestampMs) {
 		return new Date(timestampMs).toLocaleTimeString(undefined, {
 			hour: '2-digit',
@@ -188,6 +210,24 @@ const saveToStorage = (key, value) => {
 	// TODO: 保存成功確認？
 	chrome.storage.local.set({
 		[key]: value,
+	});
+};
+
+/**
+ *
+ * @returns {Promise<{
+ *	bytesInUse: number;
+ *	bytesQuota: number;
+ * }>}
+ */
+const fetchUsage = () => {
+	return new Promise(resolve => {
+		chrome.storage.local.getBytesInUse().then(bytesInUse => {
+			resolve({
+				bytesInUse,
+				bytesQuota: chrome.storage.local.QUOTA_BYTES,
+			});
+		});
 	});
 };
 
@@ -725,6 +765,20 @@ const App = () => {
 		return () => window.removeEventListener('paste', listener);
 	}, [isInputToDoFromClipboardEnabled]);
 
+	/** @type{ReturnType<
+	 *  typeof useState<
+	 *   Awaited<
+	 *    ReturnType<
+	 *     typeof fetchUsage
+	 *    >
+	 *   >
+	 *  >
+	 * >} */
+	const [usage, setUsage] = useState();
+	useEffect(() => {
+		fetchUsage().then(setUsage);
+	}, []);
+
 	const usedAccessKeys = useMemo(() => {
 		return types.map(type => type.accessKey).filter(Boolean).flatMap(c => {
 			// アクセスキーは大文字小文字を区別しない
@@ -1142,6 +1196,18 @@ const App = () => {
 				})),
 			);
 		})),
+		createElement('h2', {}, 'Stats'),
+		createElement('ul', {},
+			...[
+				`履歴総数: ${allList.length}`,
+				`ToDo総数: ${todos.length}`,
+				`記録開始日: ${allList[0] ? Formats.localeDateString(allList[0].start) : '取得中'}`,
+				`記録日数: ${allList.map(record => Formats.localeDateString(record.start)).reduce((acc, date) => {
+					return date === acc.date ? acc : {date, count: acc.count + 1};
+				}, {date: 'null', count: 0}).count}`,
+				'ストレージ: ' + (usage ? `${Formats.percent(usage.bytesInUse / usage.bytesQuota)} (${Formats.bytes(usage.bytesInUse)} / ${Formats.bytes(usage.bytesQuota)})` : '計算中'),
+			].map(text => createElement('li', {}, text)),
+		),
 	);
 };
 
