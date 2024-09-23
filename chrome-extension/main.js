@@ -424,8 +424,8 @@ const groupNothingName = '(グループなし)';
  * 	saveTodo: function(): void
  * 	finishAndAddRecord: function(TimeRecord | Todo): void
  * 	types: {name: string}[];
- * 	todoWorkTimes: TodoWorkTime[];
- * 	showSubtotal: function(TodoWorkTime): void;
+ * 	todoWorkTimeTatal: number;
+ * 	showSubtotal: function(): void;
  * }} param0
  * @returns
  */
@@ -439,7 +439,7 @@ const TodoRow = ({
 	saveTodo,
 	finishAndAddRecord,
 	types,
-	todoWorkTimes,
+	todoWorkTimeTatal,
 	showSubtotal,
 }) => {
 	const hasUrlMemo = !!todo.memo?.match(/^http[^ ]+$/);
@@ -515,8 +515,8 @@ const TodoRow = ({
 			style: {
 				cursor: 'pointer',
 			},
-			onClick: () => showSubtotal(todoWorkTimes[i]),
-		}, Formats.seconds(todoWorkTimes[i].total)),
+			onClick: showSubtotal,
+		}, Formats.seconds(todoWorkTimeTatal)),
 		'] ',
 		isTodoEditMode ? createElement(
 			'select',
@@ -1044,7 +1044,9 @@ const App = () => {
 			(() => {
 				const createList = (list) => {
 					if (list.length === 0) return createElement('ul', {}, createElement('li', {}, 'ToDoなし'));
-					return createElement('ul', {}, list.map((todo, i) => {
+					return createElement('ul', {}, list.map((todo) => {
+						const i = todos.indexOf(todo);
+						const todoWorkTimeTatal = todoWorkTimes[i].total;
 						const isCurrent = (todo.type === currentRecord?.type) && ((todo.title || '') === (currentRecord?.title || ''));
 						const className = isCurrent ? 'current' : undefined;
 						return createElement(
@@ -1065,9 +1067,9 @@ const App = () => {
 									saveTodo,
 									finishAndAddRecord,
 									types,
-									todoWorkTimes,
-									showSubtotal: (subtotalByDate) => {
-										setTodoWorkTime(subtotalByDate);
+									todoWorkTimeTatal,
+									showSubtotal: () => {
+										setTodoWorkTime(todoWorkTimes[i]);
 										showSubtotalModalDialog();
 									},
 								},
