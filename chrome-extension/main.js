@@ -1295,7 +1295,7 @@ const App = () => {
 			SubtotalDialog,
 			{},
 			createElement(
-				'ul',
+				'ol',
 				{},
 				Array.from(subtotal?.entries() ?? []).map(([date, subtotal]) => {
 					return createElement('li', {key: date}, `${date}: ${Formats.seconds(subtotal)}`);
