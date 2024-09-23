@@ -1202,6 +1202,9 @@ const App = () => {
 				`履歴総数: ${allList.length}`,
 				`ToDo総数: ${todos.length}`,
 				`記録開始日: ${allList[0] ? Formats.localeDateString(allList[0].start) : '取得中'}`,
+				`記録日数: ${allList.map(record => Formats.localeDateString(record.start)).reduce((acc, date) => {
+					return date === acc.date ? acc : {date, count: acc.count + 1};
+				}, {date: 'null', count: 0}).count}`,
 				'ストレージ: ' + (usage ? `${Formats.percent(usage.bytesInUse / usage.bytesQuota)} (${Formats.bytes(usage.bytesInUse)} / ${Formats.bytes(usage.bytesQuota)})` : '計算中'),
 			].map(text => createElement('li', {}, text)),
 		),
