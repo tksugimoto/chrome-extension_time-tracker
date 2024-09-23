@@ -407,6 +407,12 @@ const groupNothingName = '(グループなし)';
  * 	deadline?: number;
  * }} Todo */
 
+/** @typedef {{
+ * 	todo: Todo;
+ * 	total: number;
+ * 	subtotalByDate: Map<string, number>;
+ * }} TodoWorkTime */
+
 /**
  * @param {{
  * 	todo: Todo;
@@ -418,8 +424,8 @@ const groupNothingName = '(グループなし)';
  * 	saveTodo: function(): void
  * 	finishAndAddRecord: function(TimeRecord | Todo): void
  * 	types: {name: string}[];
- * 	todoWorkTimes: {total: number, subtotalByDate: Map<string, number>}[];
- * 	showSubtotal: function(Map<string, number>): void;
+ * 	todoWorkTimes: TodoWorkTime[];
+ * 	showSubtotal: function(TodoWorkTime): void;
  * }} param0
  * @returns
  */
@@ -509,7 +515,7 @@ const TodoRow = ({
 			style: {
 				cursor: 'pointer',
 			},
-			onClick: () => showSubtotal(todoWorkTimes[i].subtotalByDate),
+			onClick: () => showSubtotal(todoWorkTimes[i]),
 		}, Formats.seconds(todoWorkTimes[i].total)),
 		'] ',
 		isTodoEditMode ? createElement(
@@ -853,6 +859,7 @@ const App = () => {
 		});
 	}, [types]);
 
+	/** @type{TodoWorkTime[]} */
 	const todoWorkTimes = allList.reduce((acc, record) => {
 		// todoのkeyが2つ(type,title)なのでMapは使えずloopで該当のindexを探すしかない
 		const matched = acc.find(({todo}) => {
@@ -882,8 +889,8 @@ const App = () => {
 	}));
 
 
-	/** @type{ReturnType<typeof useState<Map<string, number>>>} */
-	const [subtotal, setSubtotal] = useState();
+	/** @type{ReturnType<typeof useState<typeof todoWorkTimes[number]>>} */
+	const [todoWorkTime, setTodoWorkTime] = useState();
 	const {
 		Dialog: SubtotalDialog,
 		showModalDialog: showSubtotalModalDialog,
@@ -1060,7 +1067,7 @@ const App = () => {
 									types,
 									todoWorkTimes,
 									showSubtotal: (subtotalByDate) => {
-										setSubtotal(subtotalByDate);
+										setTodoWorkTime(subtotalByDate);
 										showSubtotalModalDialog();
 									},
 								},
@@ -1294,10 +1301,12 @@ const App = () => {
 		createElement(
 			SubtotalDialog,
 			{},
+			createElement('h3', {}, `${todoWorkTime?.todo.type}(${todoWorkTime?.todo.title})`),
+			todoWorkTime?.total && createElement('p', {}, `合計: ${Formats.seconds(todoWorkTime.total)}`),
 			createElement(
 				'ol',
 				{},
-				Array.from(subtotal?.entries() ?? []).map(([date, subtotal]) => {
+				Array.from(todoWorkTime?.subtotalByDate?.entries() ?? []).map(([date, subtotal]) => {
 					return createElement('li', {key: date}, `${date}: ${Formats.seconds(subtotal)}`);
 				}),
 			),
