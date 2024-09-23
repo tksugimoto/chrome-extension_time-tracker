@@ -417,7 +417,7 @@ const groupNothingName = '(グループなし)';
  * 	saveTodo: function(): void
  * 	finishAndAddRecord: function(TimeRecord | Todo): void
  * 	types: {name: string}[];
- * 	todoWorkTimes: {total: number}[];
+ * 	todoWorkTimes: {total: number, subtotalByDate: Map<string, number>}[];
  * }} param0
  * @returns
  */
@@ -500,7 +500,12 @@ const TodoRow = ({
 		) : todo.deadline && createElement('span', {
 			className: todo.deadline < Date.now() ? 'expired-deadline' : todo.deadline < (Date.now() + 3 * 24 * 60 * 60 * 1000) ? 'close-to-deadline' : null,
 		}, `(-${Formats.localeDeadlineDateString(todo.deadline)})`)),
-		` [${Formats.seconds(todoWorkTimes[i].total)}] `,
+		' [',
+		createElement('span', {
+			// TODO: title表示から変更する(点滅するため)
+			title: [...todoWorkTimes[i].subtotalByDate.entries()].map(([date, subtotal]) => `${date}: ${Formats.seconds(subtotal)}`).join('\n'),
+		}, Formats.seconds(todoWorkTimes[i].total)),
+		'] ',
 		isTodoEditMode ? createElement(
 			'select',
 			{
@@ -801,12 +806,19 @@ const App = () => {
 		});
 		if (matched) {
 			matched.total += record.workTimeSeconds;
+
+			const key = Formats.localeDateString(record.start);
+			let subtotal = matched.subtotalByDate.get(key) ?? 0;
+			subtotal += record.workTimeSeconds;
+			matched.subtotalByDate.set(key, subtotal);
 		}
 		return acc;
 	}, todos.map(todo => {
 		return {
 			todo,
 			total: 0,
+			/** @type{Map<string, number>} */
+			subtotalByDate: new Map(),
 		};
 	}));
 
