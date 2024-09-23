@@ -5,6 +5,7 @@ const {
 	createElement,
 	useState,
 	useCallback,
+	useRef,
 	useEffect,
 	useMemo,
 } = React;
@@ -406,6 +407,12 @@ const groupNothingName = '(グループなし)';
  * 	deadline?: number;
  * }} Todo */
 
+/** @typedef {{
+ * 	todo: Todo;
+ * 	total: number;
+ * 	subtotalByDate: Map<string, number>;
+ * }} TodoWorkTime */
+
 /**
  * @param {{
  * 	todo: Todo;
@@ -417,7 +424,8 @@ const groupNothingName = '(グループなし)';
  * 	saveTodo: function(): void
  * 	finishAndAddRecord: function(TimeRecord | Todo): void
  * 	types: {name: string}[];
- * 	todoWorkTimes: {total: number}[];
+ * 	todoWorkTimes: TodoWorkTime[];
+ * 	showSubtotal: function(TodoWorkTime): void;
  * }} param0
  * @returns
  */
@@ -432,6 +440,7 @@ const TodoRow = ({
 	finishAndAddRecord,
 	types,
 	todoWorkTimes,
+	showSubtotal,
 }) => {
 	const hasUrlMemo = !!todo.memo?.match(/^http[^ ]+$/);
 	const i = todos.indexOf(todo);
@@ -500,7 +509,15 @@ const TodoRow = ({
 		) : todo.deadline && createElement('span', {
 			className: todo.deadline < Date.now() ? 'expired-deadline' : todo.deadline < (Date.now() + 3 * 24 * 60 * 60 * 1000) ? 'close-to-deadline' : null,
 		}, `(-${Formats.localeDeadlineDateString(todo.deadline)})`)),
-		` [${Formats.seconds(todoWorkTimes[i].total)}] `,
+		' [',
+		createElement('span', {
+			title: 'クリックで日別内訳を表示',
+			style: {
+				cursor: 'pointer',
+			},
+			onClick: () => showSubtotal(todoWorkTimes[i]),
+		}, Formats.seconds(todoWorkTimes[i].total)),
+		'] ',
 		isTodoEditMode ? createElement(
 			'select',
 			{
@@ -603,6 +620,59 @@ const Checkbox = ({
 			children,
 		),
 	);
+};
+
+// forwardRefの型指定が難しいためhookにした
+const useDialog = () => {
+	/** @type {React.MutableRefObject<HTMLDialogElement | null>} */
+	const dialogRef = useRef(null);
+	const showModalDialog = useCallback(() => dialogRef.current?.showModal(), []);
+
+	/**
+	 * @param {import("react").PropsWithChildren<{}>} param0
+	 */
+	const Dialog = ({
+		children,
+	}) => createElement(
+		'dialog', {
+			ref: dialogRef,
+			onClick: e => {
+				if (e.target === dialogRef.current) {
+					// backdrop クリック時は閉じる
+					dialogRef.current.close();
+				}
+			},
+		},
+		createElement(
+			'div',
+			{
+				style: {
+					minWidth: 500,
+					minHeight: 500,
+				},
+			},
+			createElement(
+				'div',
+				{
+					style: {
+						display: 'flex',
+						justifyContent: 'flex-end',
+					},
+				},
+				createElement('button', {
+						onClick: e => {
+							e.preventDefault();
+							dialogRef.current?.close();
+						},
+					}, '閉じる'),
+				),
+			children,
+		),
+	);
+	return {
+		Dialog: useCallback(Dialog, []),
+		showModalDialog,
+	};
 };
 
 /**
@@ -789,6 +859,7 @@ const App = () => {
 		});
 	}, [types]);
 
+	/** @type{TodoWorkTime[]} */
 	const todoWorkTimes = allList.reduce((acc, record) => {
 		// todoのkeyが2つ(type,title)なのでMapは使えずloopで該当のindexを探すしかない
 		const matched = acc.find(({todo}) => {
@@ -801,14 +872,29 @@ const App = () => {
 		});
 		if (matched) {
 			matched.total += record.workTimeSeconds;
+
+			const key = Formats.localeDateString(record.start);
+			let subtotal = matched.subtotalByDate.get(key) ?? 0;
+			subtotal += record.workTimeSeconds;
+			matched.subtotalByDate.set(key, subtotal);
 		}
 		return acc;
 	}, todos.map(todo => {
 		return {
 			todo,
 			total: 0,
+			/** @type{Map<string, number>} */
+			subtotalByDate: new Map(),
 		};
 	}));
+
+
+	/** @type{ReturnType<typeof useState<typeof todoWorkTimes[number]>>} */
+	const [todoWorkTime, setTodoWorkTime] = useState();
+	const {
+		Dialog: SubtotalDialog,
+		showModalDialog: showSubtotalModalDialog,
+	} = useDialog();
 
 	// TODO: 日付関連もう少し整理する
 	const list = allList.filter(record => record.isDateOf(startOfDate()));
@@ -980,6 +1066,10 @@ const App = () => {
 									finishAndAddRecord,
 									types,
 									todoWorkTimes,
+									showSubtotal: (subtotalByDate) => {
+										setTodoWorkTime(subtotalByDate);
+										showSubtotalModalDialog();
+									},
 								},
 							),
 						);
@@ -1207,6 +1297,19 @@ const App = () => {
 				}, {date: 'null', count: 0}).count}`,
 				'ストレージ: ' + (usage ? `${Formats.percent(usage.bytesInUse / usage.bytesQuota)} (${Formats.bytes(usage.bytesInUse)} / ${Formats.bytes(usage.bytesQuota)})` : '計算中'),
 			].map(text => createElement('li', {}, text)),
+		),
+		createElement(
+			SubtotalDialog,
+			{},
+			createElement('h3', {}, `${todoWorkTime?.todo.type}(${todoWorkTime?.todo.title})`),
+			todoWorkTime?.total && createElement('p', {}, `合計: ${Formats.seconds(todoWorkTime.total)}`),
+			createElement(
+				'ol',
+				{},
+				Array.from(todoWorkTime?.subtotalByDate?.entries() ?? []).map(([date, subtotal]) => {
+					return createElement('li', {key: date}, `${date}: ${Formats.seconds(subtotal)}`);
+				}),
+			),
 		),
 	);
 };
