@@ -419,6 +419,7 @@ const groupNothingName = '(グループなし)';
  * 	finishAndAddRecord: function(TimeRecord | Todo): void
  * 	types: {name: string}[];
  * 	todoWorkTimes: {total: number, subtotalByDate: Map<string, number>}[];
+ * 	showSubtotal: function(Map<string, number>): void;
  * }} param0
  * @returns
  */
@@ -433,6 +434,7 @@ const TodoRow = ({
 	finishAndAddRecord,
 	types,
 	todoWorkTimes,
+	showSubtotal,
 }) => {
 	const hasUrlMemo = !!todo.memo?.match(/^http[^ ]+$/);
 	const i = todos.indexOf(todo);
@@ -503,8 +505,11 @@ const TodoRow = ({
 		}, `(-${Formats.localeDeadlineDateString(todo.deadline)})`)),
 		' [',
 		createElement('span', {
-			// TODO: title表示から変更する(点滅するため)
-			title: [...todoWorkTimes[i].subtotalByDate.entries()].map(([date, subtotal]) => `${date}: ${Formats.seconds(subtotal)}`).join('\n'),
+			title: 'クリックで日別内訳を表示',
+			style: {
+				cursor: 'pointer',
+			},
+			onClick: () => showSubtotal(todoWorkTimes[i].subtotalByDate),
 		}, Formats.seconds(todoWorkTimes[i].total)),
 		'] ',
 		isTodoEditMode ? createElement(
@@ -876,6 +881,14 @@ const App = () => {
 		};
 	}));
 
+
+	/** @type{ReturnType<typeof useState<Map<string, number>>>} */
+	const [subtotal, setSubtotal] = useState();
+	const {
+		Dialog: SubtotalDialog,
+		showModalDialog: showSubtotalModalDialog,
+	} = useDialog();
+
 	// TODO: 日付関連もう少し整理する
 	const list = allList.filter(record => record.isDateOf(startOfDate()));
 
@@ -1046,6 +1059,10 @@ const App = () => {
 									finishAndAddRecord,
 									types,
 									todoWorkTimes,
+									showSubtotal: (subtotalByDate) => {
+										setSubtotal(subtotalByDate);
+										showSubtotalModalDialog();
+									},
 								},
 							),
 						);
@@ -1273,6 +1290,17 @@ const App = () => {
 				}, {date: 'null', count: 0}).count}`,
 				'ストレージ: ' + (usage ? `${Formats.percent(usage.bytesInUse / usage.bytesQuota)} (${Formats.bytes(usage.bytesInUse)} / ${Formats.bytes(usage.bytesQuota)})` : '計算中'),
 			].map(text => createElement('li', {}, text)),
+		),
+		createElement(
+			SubtotalDialog,
+			{},
+			createElement(
+				'ul',
+				{},
+				Array.from(subtotal?.entries() ?? []).map(([date, subtotal]) => {
+					return createElement('li', {key: date}, `${date}: ${Formats.seconds(subtotal)}`);
+				}),
+			),
 		),
 	);
 };
