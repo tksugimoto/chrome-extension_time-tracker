@@ -959,7 +959,7 @@ const App = () => {
 		// TODO: リフレッシュの改善（全体は無駄）
 		const id = window.setInterval(() => {
 			refresh();
-		}, 1000);
+		}, 5000);
 		return () => window.clearInterval(id);
 	}, [refresh]);
 
