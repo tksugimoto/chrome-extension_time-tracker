@@ -760,13 +760,13 @@ const EditModeTab = ({
 
 /**
  *
- * @param {{name: string, accessKey?: string}[]} types
+ * @param {{name: string}[]} types
  * @param {string} current
  * @returns
  */
 const typesToNamesWithCurrent = (types, current) => {
-	const names = types.map(({name, accessKey}) => `${accessKey ? `${accessKey}: ` : ''}${name}`);
-	return types.some(({name}) => name === current) ? names : [current, ...names];
+	const names = types.map(({name}) => name);
+	return names.includes(current) ? names : [current, ...names];
 };
 
 const defaultTodoGroups = [
