@@ -921,7 +921,7 @@ const App = () => {
 		if (matched) {
 			matched.total += record.workTimeSeconds;
 
-			const key = Formats.localeDateString(record.start);
+			const key = Formats.localeDateString(record.start - 1000 * 60 * 60 * 4); // 4:00 で日付を切り替える
 			let subtotal = matched.subtotalByDate.get(key) ?? 0;
 			subtotal += record.workTimeSeconds;
 			matched.subtotalByDate.set(key, subtotal);
