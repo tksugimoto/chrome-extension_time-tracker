@@ -92,7 +92,7 @@ class TimeRecord {
 		let end = this.end;
 		if (!end) {
 			if (this.start > startOfDate().getTime()) end = Date.now();
-			else end = startOfDate(new Date(this.start)).setHours(22);
+			else end = startOfDate(new Date(this.start)).setHours(24);
 		}
 		// TODO: 切り捨てにしないほうが良さそう
 		return Math.floor((end - this.start) / 1000);
