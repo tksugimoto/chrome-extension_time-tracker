@@ -973,6 +973,22 @@ const App = () => {
 		React.Fragment,
 		{},
 		createElement('h1', {}, 'Time Tracker'),
+		createElement('button', {
+			onClick: () => {
+				chrome.tabs.getCurrent().then(tab => {
+					if (tab === undefined) return;
+					chrome.windows.getCurrent().then(({
+						top, left, width, height,
+					}) => {
+						chrome.windows.create({
+							top, left, width, height,
+							tabId: tab.id,
+							type: 'popup',
+						});
+					});
+				});
+			},
+		}, 'Popupとして開く(URLクリック時に別ウィンドウで開くようになる)'),
 		createElement('h2', {}, '分類'),
 		createElement(
 			EditModeTab, {
