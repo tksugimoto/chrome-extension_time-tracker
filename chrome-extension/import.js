@@ -1,5 +1,5 @@
 /* global chrome */
-import {LIST_KEYS, Lists, keysToRemove, parseBackup, setBackupDownloadLink, summarize} from './backup.js';
+import {LIST_KEYS, Lists, parseBackup, restoreBackup, setBackupDownloadLink, summarize} from './backup.js';
 
 const fileInput = /** @type {HTMLInputElement} */ (document.getElementById('file'));
 const statusElement = document.getElementById('status');
@@ -83,11 +83,9 @@ restoreButton.addEventListener('click', () => {
 	restoreButton.disabled = true;
 	fileInput.disabled = true;
 	showStatus('復元しています…');
-	chrome.storage.local.get(null).then(currentItems => {
-		downloadCurrentData(currentItems);
-		// 先に書き込んでから不要なキーを消す（clear してから書き込むと、書き込みに失敗したときに全データを失う）
-		return chrome.storage.local.set(backup.data)
-			.then(() => chrome.storage.local.remove(keysToRemove(Object.keys(currentItems), backup.data)));
+	restoreBackup(backup.data, {
+		storage: chrome.storage.local,
+		saveCurrentData: downloadCurrentData,
 	}).then(() => {
 		selectedBackup = undefined;
 		// 同じファイルを選び直しても change が発生するようにする

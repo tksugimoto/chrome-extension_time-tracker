@@ -9,6 +9,7 @@ import {
 	parseBackup,
 	summarize,
 	keysToRemove,
+	restoreBackup,
 } from '../chrome-extension/backup.js';
 
 const sampleData = () => ({
@@ -188,5 +189,94 @@ describe('keysToRemove', () => {
 
 	it('プロトタイプのプロパティ名に惑わされない', () => {
 		assert.deepEqual(keysToRemove(['constructor', 'toString'], {}), ['constructor', 'toString']);
+	});
+});
+
+describe('restoreBackup', () => {
+	/**
+	 * 呼び出し順を記録する偽の storage
+	 * @param {Object<string, any>} initialItems
+	 * @param {{failSet?: boolean, failRemove?: boolean}=} options
+	 */
+	const createFakeStorage = (initialItems, {failSet = false, failRemove = false} = {}) => {
+		const items = structuredClone(initialItems);
+		const calls = [];
+		return {
+			items,
+			calls,
+			get: keys => {
+				calls.push(['get', keys]);
+				return Promise.resolve(structuredClone(items));
+			},
+			set: newItems => {
+				calls.push(['set', Object.keys(newItems)]);
+				if (failSet) return Promise.reject(new Error('set failed'));
+				Object.assign(items, structuredClone(newItems));
+				return Promise.resolve();
+			},
+			remove: keys => {
+				calls.push(['remove', keys]);
+				if (failRemove) return Promise.reject(new Error('remove failed'));
+				for (const key of keys) delete items[key];
+				return Promise.resolve();
+			},
+		};
+	};
+	const current = () => ({
+		record: [{start: 1, type: '旧'}],
+		type: [{name: '旧'}],
+		'setting.only-current': true,
+	});
+
+	it('全データを読み、保存してから書き込み、バックアップにないキーを消す', async () => {
+		const storage = createFakeStorage(current());
+		const saved = [];
+		const data = sampleData();
+		await restoreBackup(data, {
+			storage,
+			saveCurrentData: items => {
+				saved.push(items);
+				storage.calls.push(['saveCurrentData']);
+			},
+		});
+		assert.deepEqual(storage.calls, [
+			['get', null],
+			['saveCurrentData'],
+			['set', Object.keys(data)],
+			['remove', ['setting.only-current']],
+		]);
+		assert.deepEqual(saved, [current()]);
+		assert.deepEqual(storage.items, data);
+	});
+
+	it('書き込みに失敗したら、キーを消さずに reject する', async () => {
+		const storage = createFakeStorage(current(), {failSet: true});
+		await assert.rejects(restoreBackup(sampleData(), {storage, saveCurrentData: () => {}}), /set failed/);
+		assert.deepEqual(storage.calls.map(([name]) => name), ['get', 'set']);
+		assert.deepEqual(storage.items, current());
+	});
+
+	it('キーの削除に失敗したら reject する（バックアップの内容は書き込み済み）', async () => {
+		const storage = createFakeStorage(current(), {failRemove: true});
+		await assert.rejects(restoreBackup(sampleData(), {storage, saveCurrentData: () => {}}), /remove failed/);
+		assert.deepEqual(storage.items, {...sampleData(), 'setting.only-current': true});
+	});
+
+	it('現在のデータの保存に失敗したら、書き換えない', async () => {
+		const storage = createFakeStorage(current());
+		await assert.rejects(restoreBackup(sampleData(), {
+			storage,
+			saveCurrentData: () => {
+				throw new Error('download failed');
+			},
+		}), /download failed/);
+		assert.deepEqual(storage.calls.map(([name]) => name), ['get']);
+		assert.deepEqual(storage.items, current());
+	});
+
+	it('空のバックアップなら全キーを消す', async () => {
+		const storage = createFakeStorage(current());
+		await restoreBackup({}, {storage, saveCurrentData: () => {}});
+		assert.deepEqual(storage.items, {});
 	});
 });

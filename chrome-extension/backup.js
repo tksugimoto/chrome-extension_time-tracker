@@ -162,3 +162,20 @@ export const summarize = data => {
 export const keysToRemove = (currentKeys, data) => {
 	return currentKeys.filter(key => !Object.hasOwn(data, key));
 };
+
+/**
+ * バックアップの内容で storage を置き換える
+ * @param {Object<string, any>} data バックアップの data
+ * @param {Object} param1
+ * @param {Pick<chrome.storage.StorageArea, 'get' | 'set' | 'remove'>} param1.storage
+ * @param {function(Object<string, any>): void} param1.saveCurrentData 書き換える前の全データを受け取り、念のため保存する
+ * @returns {Promise<void>}
+ */
+export const restoreBackup = (data, {storage, saveCurrentData}) => {
+	return storage.get(null).then(currentItems => {
+		saveCurrentData(currentItems);
+		// 先に書き込んでから不要なキーを消す（clear してから書き込むと、書き込みに失敗したときに全データを失う）
+		return storage.set(data)
+			.then(() => storage.remove(keysToRemove(Object.keys(currentItems), data)));
+	});
+};
