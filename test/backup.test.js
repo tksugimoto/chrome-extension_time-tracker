@@ -93,6 +93,18 @@ describe('parseBackup', () => {
 		assert.deepEqual(parseBackup(toText(backup)), backup);
 	});
 
+	it('任意項目が揃った記録・ToDo も読み込める', () => {
+		const backup = validBackup({
+			record: [{start: 1, end: 2, type: 'a', title: 't', memo: 'm'}],
+			todo: [
+				{type: 'a', title: 't', memo: 'm', group: 'g', deadline: 1761145200000, estimation: '1.5'},
+				{type: 'a', title: 't', estimation: 2},
+				{type: 'a', title: 't', memo: null, group: null, deadline: null, estimation: null},
+			],
+		});
+		assert.deepEqual(parseBackup(toText(backup)), backup);
+	});
+
 	it('未知のキーもそのまま残す', () => {
 		const backup = validBackup({'future-key': {a: 1}});
 		assert.deepEqual(parseBackup(toText(backup)).data, {'future-key': {a: 1}});
@@ -129,6 +141,12 @@ describe('parseBackup', () => {
 		['ToDo の title がない', toText(validBackup({todo: [{type: 'a', title: 'b'}, {type: 'a'}]})), /ToDoの 2 件目.*タイトル/],
 		['分類が文字列（{name} でない）', toText(validBackup({type: ['開発']})), /分類の 1 件目が不正です: オブジェクトではありません/],
 		['分類の name が数値', toText(validBackup({type: [{name: 1}]})), /分類の 1 件目.*名前/],
+		['記録の title が数値', toText(validBackup({record: [{start: 1, type: 'a', title: 1}]})), /記録の 1 件目.*タイトル \(title\)/],
+		['記録の memo が配列', toText(validBackup({record: [{start: 1, type: 'a', memo: []}]})), /記録の 1 件目.*メモ \(memo\)/],
+		['ToDo の memo が数値', toText(validBackup({todo: [{type: 'a', title: 'b', memo: 1}]})), /ToDoの 1 件目.*メモ \(memo\)/],
+		['ToDo の group が数値', toText(validBackup({todo: [{type: 'a', title: 'b', group: 1}]})), /ToDoの 1 件目.*グループ \(group\)/],
+		['ToDo の deadline が文字列', toText(validBackup({todo: [{type: 'a', title: 'b', deadline: '2026-10-23'}]})), /ToDoの 1 件目.*期限 \(deadline\)/],
+		['ToDo の estimation が真偽値', toText(validBackup({todo: [{type: 'a', title: 'b', estimation: true}]})), /ToDoの 1 件目.*見積もり \(estimation\)/],
 		['ToDo グループがオブジェクト', toText(validBackup({'todo-group': [{name: 'x'}]})), /ToDo グループの 1 件目が不正です: 文字列ではありません/],
 	];
 	for (const [name, text, message] of invalidCases) {

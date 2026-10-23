@@ -54,6 +54,9 @@ const isFiniteNumber = value => typeof value === 'number' && Number.isFinite(val
 
 const isString = value => typeof value === 'string';
 
+/** 任意項目: 未設定 (undefined / null) か、条件を満たす */
+const isOptional = (value, isValid) => value == null || isValid(value);
+
 /**
  * 一覧（配列）で保存しているキーと、その要素が読み込めない場合に理由を返す関数
  * @type {Object<string, {label: string, findProblem: function(any): (string | undefined)}>}
@@ -66,6 +69,8 @@ export const Lists = {
 			if (!isFiniteNumber(record.start)) return '開始時刻 (start) が数値ではありません';
 			if (record.end != null && !isFiniteNumber(record.end)) return '終了時刻 (end) が数値ではありません';
 			if (!isString(record.type)) return '分類 (type) が文字列ではありません';
+			if (!isOptional(record.title, isString)) return 'タイトル (title) が文字列ではありません';
+			if (!isOptional(record.memo, isString)) return 'メモ (memo) が文字列ではありません';
 		},
 	},
 	todo: {
@@ -74,6 +79,11 @@ export const Lists = {
 			if (!isPlainObject(todo)) return 'オブジェクトではありません';
 			if (!isString(todo.type)) return '分類 (type) が文字列ではありません';
 			if (!isString(todo.title)) return 'タイトル (title) が文字列ではありません';
+			if (!isOptional(todo.memo, isString)) return 'メモ (memo) が文字列ではありません';
+			if (!isOptional(todo.group, isString)) return 'グループ (group) が文字列ではありません';
+			if (!isOptional(todo.deadline, isFiniteNumber)) return '期限 (deadline) が数値ではありません';
+			// 入力欄の値（文字列）のまま保存している
+			if (!isOptional(todo.estimation, v => isString(v) || isFiniteNumber(v))) return '見積もり (estimation) が文字列でも数値でもありません';
 		},
 	},
 	type: {
