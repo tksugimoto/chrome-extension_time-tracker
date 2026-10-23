@@ -13,12 +13,21 @@ const autoDownload = new URLSearchParams(location.search).has('auto');
 if (autoDownload) history.replaceState(null, '', location.pathname);
 
 chrome.storage.local.get(null).then(items => {
-	const blob = new Blob([JSON.stringify(items, null, '\t')], {
+	const now = new Date();
+	// 将来インポートするときに、ファイルの種類と形式の版を見分けられるようにする
+	const backup = {
+		format: 'time-tracker-backup',
+		version: 1,
+		extensionVersion: chrome.runtime.getManifest().version,
+		exportedAt: now.toISOString(),
+		data: items,
+	};
+	const blob = new Blob([JSON.stringify(backup, null, '\t')], {
 		type: 'application/json',
 	});
 	const link = document.getElementById('download');
 	link.href = URL.createObjectURL(blob);
-	link.download = link.textContent = createFileName();
+	link.download = link.textContent = createFileName(now);
 	link.hidden = false;
 	if (autoDownload) link.click();
 	document.getElementById('status').textContent = autoDownload
