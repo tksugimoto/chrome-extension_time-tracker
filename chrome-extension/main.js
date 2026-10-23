@@ -408,6 +408,7 @@ const groupNothingName = '(グループなし)';
  * 	memo?: string;
  * 	group?: string;
  * 	deadline?: number;
+ * 	estimation?: string;
  * }} Todo */
 
 /** @typedef {{
@@ -417,11 +418,24 @@ const groupNothingName = '(グループなし)';
  * }} TodoWorkTime */
 
 /**
+ * @param {Todo} todo
+ * @param {number} todoWorkTimeTatal
+ * @returns
+ */
+const calculateRemainingTime = (todo, todoWorkTimeTatal) => {
+	if (!todo.estimation) return 0;
+	const estimationSeconds = Number(todo.estimation) * 60 * 60;
+	if (todoWorkTimeTatal > estimationSeconds) return 0;
+	return estimationSeconds - todoWorkTimeTatal;
+};
+
+/**
  * @param {{
  * 	todo: Todo;
  * 	isTodoEditMode: boolean;
  * 	usingTodoGroup: boolean;
  * 	usingTodoDeadline: boolean;
+ * 	usingTodoEstimation: boolean;
  * 	todos: Todo[],
  * 	todoGroups: string[],
  * 	saveTodo: function(): void
@@ -437,6 +451,7 @@ const TodoRow = ({
 	isTodoEditMode,
 	usingTodoGroup,
 	usingTodoDeadline,
+	usingTodoEstimation,
 	todos,
 	todoGroups,
 	saveTodo,
@@ -520,6 +535,25 @@ const TodoRow = ({
 			},
 			onClick: showSubtotal,
 		}, Formats.seconds(todoWorkTimeTatal)),
+		usingTodoEstimation && createElement(React.Fragment, {},
+			' / ',
+			isTodoEditMode && createElement('input', {
+				type: 'text',
+				value: todo.estimation,
+				placeholder: '見積もり',
+				size: 4,
+				onChange: e => {
+					// FIXME: mutableをやめる
+					const value = e.target.value;
+					const num = Number(value);
+					todo.estimation = Number.isNaN(num) || num < 0 ? undefined : value;
+					saveTodo();
+				},
+			}),
+			isTodoEditMode && '時間',
+			!isTodoEditMode && Formats.seconds(todo.estimation ? Number(todo.estimation) * 60 * 60 : 0),
+			todo.estimation && ` (${Formats.percent(todoWorkTimeTatal / (Number(todo.estimation) * 60 * 60))})`,
+		),
 		'] ',
 		isTodoEditMode ? createElement(
 			'select',
@@ -818,6 +852,7 @@ const App = () => {
 	const [isInputToDoFromClipboardEnabled, setInputToDoFromClipboardEnabled] = useSetting('clipboard-to-todo', false);
 	const [usingTodoGroup, setTodoGroup] = useSetting('use-todo-group', false);
 	const [usingTodoDeadline, setTodoDeadline] = useSetting('use-todo-deadline', false);
+	const [usingTodoEstimation, setTodoEstimation] = useSetting('use-todo-estimation', false);
 	const [isDetailVisible, setDetailVisible] = useSetting('detail-visible', false);
 	const [hideNoTitleOrMemo, setHideNoTitleOrMemo] = useSetting('no-title_or_memo', true);
 	const [isAggregationVisible, setAggregationVisible] = useSetting('aggregation-visible', false);
@@ -1071,6 +1106,13 @@ const App = () => {
 				},
 				'期限を管理する',
 			),
+			createElement(
+				Checkbox, {
+					checked: usingTodoEstimation,
+					onChange: setTodoEstimation,
+				},
+				'見積もりを管理する',
+			),
 			(() => {
 				const createList = (list) => {
 					if (list.length === 0) return createElement('ul', {}, createElement('li', {}, 'ToDoなし'));
@@ -1092,6 +1134,7 @@ const App = () => {
 									isTodoEditMode,
 									usingTodoGroup,
 									usingTodoDeadline,
+									usingTodoEstimation,
 									todos,
 									todoGroups,
 									saveTodo,
@@ -1163,6 +1206,28 @@ const App = () => {
 				return createList(todos);
 			})(),
 			'※ ToDoごとの経過時間の集計には分類・タイトルのみを使用し、メモ / URLの違いを無視する',
+			// TODO: 表示方法調整(グループ別対応？)
+			usingTodoEstimation && createElement(
+				'p',
+				{},
+				'残り時間: ',
+				Formats.seconds(todoWorkTimes.reduce((acc, {todo, total}) => {
+					return acc + calculateRemainingTime(todo, total);
+				}, 0)),
+			),
+			usingTodoEstimation && createElement(
+				'ul',
+				{},
+				// @ts-expect-error TS2339: Property 'groupBy' does not exist on type 'MapConstructor'.
+				// もうすぐ型定義が追加される https://github.com/microsoft/TypeScript/pull/56805
+				[...Map.groupBy(todoWorkTimes, ({todo}) => todo.type).entries()].map(([type, sameTypeTodoWorkTimes]) => {
+					const remainTime = sameTypeTodoWorkTimes.reduce((acc, {todo, total}) => {
+						return acc + calculateRemainingTime(todo, total);
+					}, 0);
+					if (!remainTime) return null;
+					return createElement('li', {key: type}, `${type}: ${Formats.seconds(remainTime)}`);
+				}),
+			),
 			(isTodoEditMode && usingTodoGroup) && createElement(
 				'form',
 				{
