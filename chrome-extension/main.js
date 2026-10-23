@@ -92,6 +92,14 @@ class TimeRecord {
 	setMemo(value) {
 		this.memo = value;
 	}
+	/**
+	 * @param {number} start
+	 * @param {number=} end 未指定の場合は計測中に戻す
+	 */
+	setTime(start, end) {
+		this.start = start;
+		this.end = end;
+	}
 	get workTimeSeconds() {
 		let end = this.end;
 		if (!end) {
@@ -151,7 +159,15 @@ const Formats = {
 	 * @param {Date} date
 	 */
 	ISODateString(date) {
-		return new Date(date.getTime() - (date.getTimezoneOffset() * 60000 )).toISOString().replace(/T.*/, '');
+		return this.ISODateTimeString(date.getTime()).replace(/T.*/, '');
+	},
+	/**
+	 * input[type="datetime-local"] の値 (秒まで)
+	 * @param {number} timestampMs
+	 */
+	ISODateTimeString(timestampMs) {
+		const offsetMs = new Date(timestampMs).getTimezoneOffset() * 60000;
+		return new Date(timestampMs - offsetMs).toISOString().replace(/\.\d+Z$/, '');
 	},
 	/**
 	 * toLocaleString と同じく、不正な値は例外にせず 'Invalid Date' を返す
@@ -322,6 +338,7 @@ const titleSize = 40;
  * @param {{name: string}[]} param0.types
  * @param {TimeRecord} param0.record
  * @param {function(): void} param0.save
+ * @param {function(TimeRecord): void=} param0.editTime
  * @param {function(TimeRecord): void=} param0.finishAndAddRecord
  * @param {boolean=} param0.isEditable
  * @param {boolean=} param0.hideDate
@@ -332,6 +349,7 @@ const RecordView = ({
 	types,
 	record,
 	save,
+	editTime,
 	finishAndAddRecord,
 	isEditable = true, // FIXME: 名前の適切化
 	hideDate = false,
@@ -343,6 +361,15 @@ const RecordView = ({
 		{},
 		`${Formats[hideDate ? 'localeTimeString' : 'localeDateTimeString'](record.start)}～${record.end ? Formats.localeTimeString(record.end) : ''}`,
 		`(${Formats.seconds(record.workTimeSeconds)})`,
+		editTime && createElement(
+			'button',
+			{
+				onClick: () => {
+					editTime(record);
+				},
+			},
+			'時刻編集',
+		),
 		createElement(
 			'select',
 			{
@@ -407,6 +434,80 @@ const RecordView = ({
 				'終了',
 			)
 		),
+	);
+};
+
+/**
+ * 記録の開始・終了時刻を編集する
+ * 前後の記録と重ならず、開始日の中 (0:00～24:00) に収まる範囲に制限する
+ * @param {{
+ * 	record: TimeRecord;
+ * 	prev?: TimeRecord;
+ * 	next?: TimeRecord;
+ * 	save: function(): void;
+ * }} param0
+ */
+const EditTimeForm = ({
+	record,
+	prev,
+	next,
+	save,
+}) => {
+	const initialStart = Formats.ISODateTimeString(record.start);
+	const initialEnd = record.end ? Formats.ISODateTimeString(record.end) : '';
+	const [start, setStart] = useState(initialStart);
+	const [end, setEnd] = useState(initialEnd);
+	const min = Formats.ISODateTimeString(Math.max(prev?.end ?? prev?.start ?? 0, startOfDate(new Date(record.start)).getTime()));
+	const max = Formats.ISODateTimeString(Math.min(next?.start ?? Date.now(), record.endOfStartDate));
+	// 計測中に戻せるのは今日の最後の記録だけ (前日以前は 24:00 で自動終了されるため)
+	const canResume = !next && record.isDateOf(startOfDate());
+	return createElement(
+		'form',
+		{
+			method: 'dialog',
+			// 入力値のチェック (前後の記録と重ならない・終了は開始以降) は input の min/max/required で行う
+			onSubmit: () => {
+				// datetime-local の値はタイムゾーンなしのため、ローカル時刻として解釈される
+				// 秒未満を落とさないよう、変更していない値は元のまま使う
+				const startMs = start === initialStart ? record.start : new Date(start).getTime();
+				const endMs = end === initialEnd ? record.end : end ? new Date(end).getTime() : undefined;
+				// FIXME: mutableをやめる
+				record.setTime(startMs, endMs);
+				save();
+			},
+		},
+		createElement('h3', {}, record.title ? `${record.type}(${record.title})` : record.type),
+		createElement(
+			'label',
+			{},
+			'開始: ',
+			createElement('input', {
+				type: 'datetime-local',
+				step: 1,
+				required: true,
+				value: start,
+				min,
+				max,
+				onChange: e => setStart(e.target.value),
+			}),
+		),
+		createElement('br'),
+		createElement(
+			'label',
+			{},
+			'終了: ',
+			createElement('input', {
+				type: 'datetime-local',
+				step: 1,
+				required: !canResume,
+				value: end,
+				min: start,
+				max,
+				onChange: e => setEnd(e.target.value),
+			}),
+			canResume && '(空欄にすると計測中に戻る)',
+		),
+		createElement('button', {}, '確定'),
 	);
 };
 
@@ -954,6 +1055,22 @@ const App = () => {
 		showModalDialog: showSubtotalModalDialog,
 	} = useDialog();
 
+	/** @type{ReturnType<typeof useState<{record: TimeRecord, key: number}>>} */
+	const [editTimeTarget, setEditTimeTarget] = useState();
+	const {
+		Dialog: EditTimeDialog,
+		showModalDialog: showEditTimeModalDialog,
+	} = useDialog();
+	/**
+	 * @param {TimeRecord} record
+	 */
+	const editTime = record => {
+		// 開くたびに key を変えて、前回キャンセルした入力内容を残さない
+		setEditTimeTarget({record, key: Date.now()});
+		showEditTimeModalDialog();
+	};
+	const editTimeTargetIndex = editTimeTarget ? allList.indexOf(editTimeTarget.record) : -1;
+
 	// TODO: 日付関連もう少し整理する
 	const list = allList.filter(record => record.isDateOf(startOfDate()));
 
@@ -1330,7 +1447,7 @@ const App = () => {
 			),
 		),
 		createElement('h2', {}, '現在'),
-		currentRecord ? createElement(RecordView, {titleRef: currentTitleRef, types, record: currentRecord, save, hideDate: true}) : '未開始',
+		currentRecord ? createElement(RecordView, {titleRef: currentTitleRef, types, record: currentRecord, save, editTime, hideDate: true}) : '未開始',
 		createElement('h2', {}, '履歴'),
 		createElement('ol', {}, list.map((record) => {
 			return createElement(
@@ -1338,7 +1455,7 @@ const App = () => {
 				{
 					key: record.start,
 				},
-				createElement(RecordView, {types, record, save, finishAndAddRecord, hideDate: true}),
+				createElement(RecordView, {types, record, save, editTime, finishAndAddRecord, hideDate: true}),
 			);
 		})),
 		createElement('h2', {}, '集計結果'),
@@ -1437,7 +1554,7 @@ const App = () => {
 									{
 										key: record.start,
 									},
-									createElement(RecordView, {types, record, save, finishAndAddRecord, isEditable: false}),
+									createElement(RecordView, {types, record, save, editTime, finishAndAddRecord, isEditable: false}),
 								);
 							})),
 						);
@@ -1450,7 +1567,7 @@ const App = () => {
 						{
 							key: record.start,
 						},
-						createElement(RecordView, {types, record, save, finishAndAddRecord, isEditable: false}),
+						createElement(RecordView, {types, record, save, editTime, finishAndAddRecord, isEditable: false}),
 					);
 				})),
 			);
@@ -1466,6 +1583,17 @@ const App = () => {
 				}, {date: 'null', count: 0}).count}`,
 				'ストレージ: ' + (usage ? Formats.bytes(usage.bytesInUse) : '計算中'),
 			].map(text => createElement('li', {}, text)),
+		),
+		createElement(
+			EditTimeDialog,
+			{},
+			editTimeTarget && createElement(EditTimeForm, {
+				key: editTimeTarget.key,
+				record: editTimeTarget.record,
+				prev: allList[editTimeTargetIndex - 1],
+				next: allList[editTimeTargetIndex + 1],
+				save,
+			}),
 		),
 		createElement(
 			SubtotalDialog,
