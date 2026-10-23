@@ -95,14 +95,14 @@ class TimeRecord {
 	get workTimeSeconds() {
 		let end = this.end;
 		if (!end) {
-			if (this.start > startOfDate().getTime()) end = Date.now();
+			if (this.isDateOf(startOfDate())) end = Date.now();
 			else end = this.endOfStartDate;
 		}
 		// TODO: 切り捨てにしないほうが良さそう
 		return Math.floor((end - this.start) / 1000);
 	}
 	isDateOf(targetDate) {
-		return this.start > targetDate.getTime();
+		return this.start >= targetDate.getTime();
 	}
 }
 
