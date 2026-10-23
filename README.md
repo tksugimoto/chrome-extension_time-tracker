@@ -24,3 +24,14 @@
 1. 分類一覧またはToDo一覧の`開始`をクリック
 1. 別の作業に切り替える場合は対応する`開始`をクリック
 	- ※ 現在のものは自動で終了される
+
+## 開発
+Node.js 20.11 以上が必要
+
+```sh
+npm ci
+npm run lint
+npm test
+```
+- テストは Node.js 組み込みのテストランナー (`node:test`) で、`test/*.test.js` に置く
+- テストしたい処理は `chrome-extension/main.js` から ES Modules に切り出して import する（例: `chrome-extension/utils.js`。まとまりが大きくなったら分野ごとのモジュールに分ける）

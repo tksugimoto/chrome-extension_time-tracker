@@ -6,6 +6,7 @@ module.exports = {
 	},
 	parserOptions: {
 		ecmaVersion: 2020,
+		sourceType: 'module',
 	},
 	extends: [
 		'eslint:recommended',
@@ -18,9 +19,15 @@ module.exports = {
 		},
 	},
 	overrides: [{
-		files: ['.eslintrc.js'],
+		files: ['.eslintrc.cjs', 'test/**/*.js'],
 		env: {
 			node: true,
+		},
+	}, {
+		// <script type="module"> 以外で読み込まれるもの
+		files: ['chrome-extension/background.js', 'chrome-extension/export.js'],
+		parserOptions: {
+			sourceType: 'script',
 		},
 	}],
 	rules: {

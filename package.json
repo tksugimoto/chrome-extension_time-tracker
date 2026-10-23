@@ -1,7 +1,12 @@
 {
   "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
   "scripts": {
-    "lint": "eslint --ext .js ."
+    "lint": "eslint --ext .js .",
+    "test": "node --test test/*.test.js"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.256",
