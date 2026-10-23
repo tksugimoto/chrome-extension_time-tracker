@@ -11,6 +11,10 @@ const ContextMenus = [{
 	title: '新規タブで開く',
 	onClicked: openNewTab,
 }, {
+	id: 'export',
+	title: 'バックアップをダウンロード',
+	onClicked: () => chrome.tabs.create({url: '/export.html?auto'}),
+}, {
 	id: 'reload',
 	title: 'リロード',
 	onClicked: () => chrome.runtime.reload(),
