@@ -208,9 +208,11 @@ const loadFromStorage = (key, callback) => {
 	});
 };
 const saveToStorage = (key, value) => {
-	// TODO: 保存成功確認？
 	chrome.storage.local.set({
 		[key]: value,
+	}).catch(error => {
+		console.error('保存に失敗しました', key, error);
+		alert(`保存に失敗しました。\n直前の変更はページを再読み込みすると失われます。\n\n${error?.message ?? error}`);
 	});
 };
 
