@@ -26,8 +26,8 @@ const renderCounts = (current, backup) => {
 		const row = document.createElement('tr');
 		row.append(
 			createCell('th', label),
-			createCell('td', `${current[key]} 件`),
-			createCell('td', `${backup[key]} 件`),
+			createCell('td', current[key]),
+			createCell('td', backup[key]),
 		);
 		return row;
 	}));

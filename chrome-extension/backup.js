@@ -59,7 +59,8 @@ const isOptional = (value, isValid) => value == null || isValid(value);
 
 /**
  * 一覧（配列）で保存しているキーと、その要素が読み込めない場合に理由を返す関数
- * @type {Object<string, {label: string, findProblem: function(any): (string | undefined)}>}
+ * hasDefault: 保存されていないとき、main.js が既定の一覧を使う
+ * @type {Object<string, {label: string, hasDefault?: boolean, findProblem: function(any): (string | undefined)}>}
  */
 export const Lists = {
 	record: {
@@ -88,6 +89,7 @@ export const Lists = {
 	},
 	type: {
 		label: '分類',
+		hasDefault: true,
 		findProblem: type => {
 			if (!isPlainObject(type)) return 'オブジェクトではありません';
 			if (!isString(type.name)) return '名前 (name) が文字列ではありません';
@@ -95,6 +97,7 @@ export const Lists = {
 	},
 	'todo-group': {
 		label: 'ToDo グループ',
+		hasDefault: true,
 		findProblem: group => {
 			if (!isString(group)) return '文字列ではありません';
 		},
@@ -142,10 +145,13 @@ export const parseBackup = text => {
 /**
  * 確認表示用に、一覧ごとの件数を数える
  * @param {Object<string, any>} data
- * @returns {Object<string, number>}
+ * @returns {Object<string, string>}
  */
 export const summarize = data => {
-	return Object.fromEntries(LIST_KEYS.map(key => [key, data[key]?.length ?? 0]));
+	return Object.fromEntries(Object.entries(Lists).map(([key, {hasDefault}]) => {
+		if (!Object.hasOwn(data, key)) return [key, hasDefault ? '初期値' : '0 件'];
+		return [key, `${data[key].length} 件`];
+	}));
 };
 
 /**

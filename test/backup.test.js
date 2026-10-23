@@ -162,11 +162,15 @@ describe('parseBackup', () => {
 
 describe('summarize', () => {
 	it('各一覧の件数を数える', () => {
-		assert.deepEqual(summarize(sampleData()), {record: 2, todo: 1, type: 2, 'todo-group': 1});
+		assert.deepEqual(summarize(sampleData()), {record: '2 件', todo: '1 件', type: '2 件', 'todo-group': '1 件'});
 	});
 
-	it('キーがなければ 0 件', () => {
-		assert.deepEqual(summarize({}), {record: 0, todo: 0, type: 0, 'todo-group': 0});
+	it('保存されていない一覧は、既定値を使うものは「初期値」、それ以外は 0 件', () => {
+		assert.deepEqual(summarize({}), {record: '0 件', todo: '0 件', type: '初期値', 'todo-group': '初期値'});
+	});
+
+	it('空の配列が保存されていれば 0 件', () => {
+		assert.deepEqual(summarize({type: [], 'todo-group': []}), {record: '0 件', todo: '0 件', type: '0 件', 'todo-group': '0 件'});
 	});
 });
 
