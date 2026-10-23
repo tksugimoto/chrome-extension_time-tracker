@@ -75,6 +75,11 @@ const is勤務外 = type => {
 	].includes(type);
 };
 
+// バックアップから復元されたら、古いデータで上書きしないよう読み込み直す (import.js から送られる)
+chrome.runtime.onMessage.addListener(message => {
+	if (message?.type === 'backup-restored') location.reload();
+});
+
 const loadFromStorage = (key, callback) => {
 	chrome.storage.local.get(key, items => {
 		callback(items[key]);

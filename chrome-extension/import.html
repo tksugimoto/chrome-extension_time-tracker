@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+	<meta charset="utf-8">
+	<title>バックアップから復元 - Time tracker</title>
+</head>
+<body>
+	<h1>バックアップから復元</h1>
+	<p>「バックアップをダウンロード」で保存したファイルを選んでください。復元すると、現在のデータはすべてバックアップの内容に置き換えられます。</p>
+	<input type="file" id="file" accept=".json,application/json">
+	<p id="status" role="status"></p>
+	<div id="preview" hidden>
+		<table>
+			<thead>
+				<tr><th></th><th>現在</th><th>バックアップ</th></tr>
+			</thead>
+			<tbody id="counts"></tbody>
+		</table>
+		<p>復元の直前に、現在のデータのバックアップを自動でダウンロードします。</p>
+		<button type="button" id="restore">このバックアップで復元する</button>
+	</div>
+	<p id="before-restore" hidden>復元前のデータ: <a id="before-restore-download"></a></p>
+	<script type="module" src="import.js"></script>
+</body>
+</html>
