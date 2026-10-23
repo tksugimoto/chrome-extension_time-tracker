@@ -80,6 +80,10 @@ class TimeRecord {
 		if (this.end) return;
 		this.end = Date.now();
 	}
+	/** 開始日の 24:00 */
+	get endOfStartDate() {
+		return startOfDate(new Date(this.start)).setHours(24);
+	}
 	setType(value) {
 		this.type = value;
 	}
@@ -92,14 +96,14 @@ class TimeRecord {
 	get workTimeSeconds() {
 		let end = this.end;
 		if (!end) {
-			if (this.start > startOfDate().getTime()) end = Date.now();
-			else end = startOfDate(new Date(this.start)).setHours(24);
+			if (this.isDateOf(startOfDate())) end = Date.now();
+			else end = this.endOfStartDate;
 		}
 		// TODO: 切り捨てにしないほうが良さそう
 		return Math.floor((end - this.start) / 1000);
 	}
 	isDateOf(targetDate) {
-		return this.start > targetDate.getTime();
+		return this.start >= targetDate.getTime();
 	}
 }
 
@@ -1001,6 +1005,18 @@ const App = () => {
 		}, 1000);
 		return () => window.clearInterval(id);
 	}, []);
+
+	useEffect(() => {
+		// 終了し忘れたまま日付を跨いだ記録は、開始日の 24:00 で終了する
+		const today = startOfDate();
+		const unfinished = allList.filter(record => !record.end && !record.isDateOf(today));
+		if (unfinished.length === 0) return;
+		unfinished.forEach(record => {
+			// FIXME: mutableをやめる
+			record.end = record.endOfStartDate;
+		});
+		save();
+	}, [allList, save]);
 
 	const finishAndAddRecord = (args) => {
 		// FIXME: mutableをやめる
