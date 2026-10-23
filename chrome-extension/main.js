@@ -458,7 +458,10 @@ const EditTimeForm = ({
 	const [start, setStart] = useState(initialStart);
 	const [end, setEnd] = useState(initialEnd);
 	const min = Formats.ISODateTimeString(Math.max(prev?.end ?? prev?.start ?? 0, startOfDate(new Date(record.start)).getTime()));
-	const max = Formats.ISODateTimeString(Math.min(next?.start ?? Date.now(), record.endOfStartDate));
+	const maxMs = Math.min(next?.start ?? Date.now(), record.endOfStartDate);
+	const max = Formats.ISODateTimeString(maxMs);
+	// 開始が 24:00 だと翌日の記録扱いになるため、開始は 1 秒手前までにする
+	const startMax = Formats.ISODateTimeString(Math.min(maxMs, record.endOfStartDate - 1000));
 	// 計測中に戻せるのは今日の最後の記録だけ (前日以前は 24:00 で自動終了されるため)
 	const canResume = !next && record.isDateOf(startOfDate());
 	return createElement(
@@ -487,7 +490,7 @@ const EditTimeForm = ({
 				required: true,
 				value: start,
 				min,
-				max,
+				max: startMax,
 				onChange: e => setStart(e.target.value),
 			}),
 		),
