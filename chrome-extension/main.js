@@ -1008,15 +1008,15 @@ const App = () => {
 
 	useEffect(() => {
 		// 終了し忘れたまま日付を跨いだ記録は、開始日の 24:00 で終了する
-		const today = startOfDate();
-		const unfinished = allList.filter(record => !record.end && !record.isDateOf(today));
+		// allList は毎秒作り直されないので、ページを開いたまま日付を跨いだときは today の変化で動かす
+		const unfinished = allList.filter(record => !record.end && record.start < today);
 		if (unfinished.length === 0) return;
 		unfinished.forEach(record => {
 			// FIXME: mutableをやめる
 			record.end = record.endOfStartDate;
 		});
 		save();
-	}, [allList, save]);
+	}, [allList, save, today]);
 
 	const finishAndAddRecord = (args) => {
 		// FIXME: mutableをやめる
