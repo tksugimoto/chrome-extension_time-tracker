@@ -586,6 +586,7 @@ const calculateRemainingTime = (todo, todoWorkTimeTatal) => {
  * 	finishAndAddRecord: function(TimeRecord | Todo): void
  * 	types: {name: string}[];
  * 	todoWorkTimeTatal: number;
+ * 	isDuplicate: boolean;
  * 	showSubtotal: function(): void;
  * }} param0
  * @returns
@@ -602,6 +603,7 @@ const TodoRow = ({
 	finishAndAddRecord,
 	types,
 	todoWorkTimeTatal,
+	isDuplicate,
 	showSubtotal,
 }) => {
 	const hasUrlMemo = !!todo.memo?.match(/^http[^ ]+$/);
@@ -750,6 +752,9 @@ const TodoRow = ({
 				},
 			},
 		) : hasUrlMemo ? '' : todo.memo,
+		isDuplicate && createElement('span', {
+			className: 'duplicate-todo',
+		}, '※分類・タイトルが重複（時間は先に登録したToDoに計上）'),
 	);
 };
 
@@ -1232,12 +1237,15 @@ const App = () => {
 				'form',
 				{
 					onSubmit: e => {
-						// TODO: 重複チェック
+						e.preventDefault();
+						if (types.some(({name}) => name === newType)) {
+							alert(`分類「${newType}」は既に存在します`);
+							return;
+						}
 						addType({
 							name: newType,
 						});
 						setNewType('');
-						e.preventDefault();
 					},
 				},
 				createElement(
@@ -1289,12 +1297,14 @@ const App = () => {
 				'見積もりを管理する',
 			),
 			(() => {
+				const currentKey = currentRecord && todoKeyOf(currentRecord);
 				const createList = (list) => {
 					if (list.length === 0) return createElement('ul', {}, createElement('li', {}, 'ToDoなし'));
 					return createElement('ul', {}, list.map((todo) => {
 						const i = todos.indexOf(todo);
 						const todoWorkTimeTatal = todoWorkTimes[i].total;
-						const isCurrent = !!currentRecord && todoKeyOf(todo) === todoKeyOf(currentRecord);
+						const key = todoKeyOf(todo);
+						const isCurrent = key === currentKey;
 						const className = isCurrent ? 'current' : undefined;
 						return createElement(
 							'li',
@@ -1316,6 +1326,7 @@ const App = () => {
 									finishAndAddRecord,
 									types,
 									todoWorkTimeTatal,
+									isDuplicate: todoIndexByKey.get(key) !== i,
 									showSubtotal: () => {
 										setTodoWorkTime(todoWorkTimes[i]);
 										showSubtotalModalDialog();
@@ -1430,7 +1441,11 @@ const App = () => {
 				'form',
 				{
 					onSubmit: e => {
-						// TODO: 重複チェック(type,titleで一意)
+						e.preventDefault();
+						if (todoIndexByKey.has(todoKeyOf({type: newTodoType, title: newTodoTitle}))) {
+							alert(`ToDo「${newTodoType}(${newTodoTitle || '-'})」は既に存在します`);
+							return;
+						}
 						addTodo({
 							type: newTodoType,
 							title: newTodoTitle,
@@ -1438,7 +1453,6 @@ const App = () => {
 						});
 						setNewTodoTitle('');
 						setNewTodoMemo('');
-						e.preventDefault();
 					},
 				},
 				createElement(
