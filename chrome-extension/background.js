@@ -13,9 +13,7 @@ const ContextMenus = [{
 }, {
 	id: 'export',
 	title: 'バックアップをダウンロード',
-	onClicked: () => chrome.tabs.create({
-		url: '/export.html',
-	}),
+	onClicked: () => chrome.tabs.create({url: '/export.html?auto'}),
 }, {
 	id: 'reload',
 	title: 'リロード',
