@@ -8,6 +8,7 @@ const {
 	useRef,
 	useEffect,
 	useMemo,
+	useReducer,
 } = React;
 
 
@@ -274,7 +275,6 @@ const useSetting = (settingKey, defaultValue) => {
  * @param {Object[]=} options.defaultValue
  * @returns {{
  * 	allList: T[]
- * 	refresh: function(): void
  * 	add: function(T): void
  * 	save: function(): void
  * }}
@@ -308,7 +308,6 @@ const useStorageList = (storageKey, {
 	}, [allList, refresh, storageKey]);
 	return {
 		allList,
-		refresh,
 		add,
 		save,
 	};
@@ -426,6 +425,37 @@ const groupNothingName = '(グループなし)';
  * 	total: number;
  * 	subtotalByDate: Map<string, number>;
  * }} TodoWorkTime */
+
+/**
+ * ToDoごとの集計には分類・タイトルのみを使用し、メモの違いは無視する
+ * @param {{type: string; title?: string}} todoOrRecord
+ */
+const todoKeyOf = ({type, title}) => JSON.stringify([type, title || '']);
+
+/**
+ * 記録の作業時間を ToDo ごとの集計に加算した配列を返す。加算した要素だけ複製し、引数は変更しない
+ * @param {TodoWorkTime[]} todoWorkTimes
+ * @param {Map<string, number>} todoIndexByKey todoKeyOf から todoWorkTimes の添字への対応（同じキーの ToDo が複数あれば先頭）
+ * @param {TimeRecord[]} records
+ */
+const addRecordsToTodoWorkTimes = (todoWorkTimes, todoIndexByKey, records) => {
+	const result = [...todoWorkTimes];
+	const copiedIndexes = new Set();
+	for (const record of records) {
+		const i = todoIndexByKey.get(todoKeyOf(record));
+		if (i === undefined) continue;
+		if (!copiedIndexes.has(i)) {
+			copiedIndexes.add(i);
+			result[i] = {...result[i], subtotalByDate: new Map(result[i].subtotalByDate)};
+		}
+		const matched = result[i];
+		matched.total += record.workTimeSeconds;
+
+		const date = Formats.localeDateString(record.start);
+		matched.subtotalByDate.set(date, (matched.subtotalByDate.get(date) ?? 0) + record.workTimeSeconds);
+	}
+	return result;
+};
 
 /**
  * @param {Todo} todo
@@ -850,7 +880,6 @@ const App = () => {
 
 	const {
 		allList,
-		refresh,
 		add,
 		save,
 	} = useStorageList('record', {
@@ -917,35 +946,38 @@ const App = () => {
 		});
 	}, [types]);
 
-	/** @type{TodoWorkTime[]} */
-	const todoWorkTimes = allList.reduce((acc, record) => {
-		// todoのkeyが2つ(type,title)なのでMapは使えずloopで該当のindexを探すしかない
-		const matched = acc.find(({todo}) => {
-			return (
-				todo.type === record.type
-			) && (
-				// memoの違いは無視する
-				(todo.title || '') === (record.title || '')
-			);
+	// 毎秒の再描画で全件を集計し直さないよう、終了済みの記録の集計はメモ化し、計測中の記録だけ毎回加算する
+	// 記録を書き換えたときは save() / add() で allList を作り直すこと（作り直さないとメモ化した集計が古いままになる）
+	const todoIndexByKey = useMemo(() => {
+		/** @type{Map<string, number>} */
+		const todoIndexByKey = new Map();
+		todos.forEach((todo, i) => {
+			const key = todoKeyOf(todo);
+			if (!todoIndexByKey.has(key)) todoIndexByKey.set(key, i);
 		});
-		if (matched) {
-			matched.total += record.workTimeSeconds;
+		return todoIndexByKey;
+	}, [todos]);
+	// 作業時間が変わり続けるのは、今日開始した未終了の記録だけ（前日以前の未終了の記録はその日の終わりまでで固定）
+	const today = startOfDate().getTime();
+	const [finishedRecords, runningRecords] = useMemo(() => {
+		/** @type{TimeRecord[]} */
+		const finished = [];
+		/** @type{TimeRecord[]} */
+		const running = [];
+		for (const record of allList) (!record.end && record.start >= today ? running : finished).push(record);
+		return [finished, running];
+	}, [allList, today]);
+	const finishedTodoWorkTimes = useMemo(() => {
+		const empty = todos.map(todo => ({todo, total: 0, subtotalByDate: new Map()}));
+		return addRecordsToTodoWorkTimes(empty, todoIndexByKey, finishedRecords);
+	}, [todos, todoIndexByKey, finishedRecords]);
+	const todoWorkTimes = addRecordsToTodoWorkTimes(finishedTodoWorkTimes, todoIndexByKey, runningRecords);
 
-			const key = Formats.localeDateString(record.start);
-			let subtotal = matched.subtotalByDate.get(key) ?? 0;
-			subtotal += record.workTimeSeconds;
-			matched.subtotalByDate.set(key, subtotal);
-		}
-		return acc;
-	}, todos.map(todo => {
-		return {
-			todo,
-			total: 0,
-			/** @type{Map<string, number>} */
-			subtotalByDate: new Map(),
-		};
-	}));
-
+	const recordedDayCount = useMemo(() => {
+		return allList.map(record => Formats.localeDateString(record.start)).reduce((acc, date) => {
+			return date === acc.date ? acc : {date, count: acc.count + 1};
+		}, {date: 'null', count: 0}).count;
+	}, [allList]);
 
 	/** @type{ReturnType<typeof useState<typeof todoWorkTimes[number]>>} */
 	const [todoWorkTime, setTodoWorkTime] = useState();
@@ -965,25 +997,26 @@ const App = () => {
 	const grouped = Map.groupBy(allList.filter(record => record.isDateOf(targetDate)), ({type}) => type);
 	const totalWorkTimeSeconds = [...grouped.values()].flatMap(records => records.map(record => is勤務外(record.type) ? 0 : record.workTimeSeconds)).reduce((a, b) => a + b, 0);
 
+	// 計測中の時間を表示し直すための再描画。allList は作り直さないので、allList に依存するメモ化は保たれる
+	const [, rerender] = useReducer(count => count + 1, 0);
 	useEffect(() => {
-		// TODO: リフレッシュの改善（全体は無駄）
 		const id = window.setInterval(() => {
-			refresh();
+			rerender();
 		}, 1000);
 		return () => window.clearInterval(id);
-	}, [refresh]);
+	}, []);
 
 	useEffect(() => {
 		// 終了し忘れたまま日付を跨いだ記録は、開始日の 24:00 で終了する
-		const today = startOfDate();
-		const unfinished = allList.filter(record => !record.end && !record.isDateOf(today));
+		// allList は毎秒作り直されないので、ページを開いたまま日付を跨いだときは today の変化で動かす
+		const unfinished = allList.filter(record => !record.end && record.start < today);
 		if (unfinished.length === 0) return;
 		unfinished.forEach(record => {
 			// FIXME: mutableをやめる
 			record.end = record.endOfStartDate;
 		});
 		save();
-	}, [allList, save]);
+	}, [allList, save, today]);
 
 	const finishAndAddRecord = (args) => {
 		// FIXME: mutableをやめる
@@ -1141,7 +1174,7 @@ const App = () => {
 					return createElement('ul', {}, list.map((todo) => {
 						const i = todos.indexOf(todo);
 						const todoWorkTimeTatal = todoWorkTimes[i].total;
-						const isCurrent = (todo.type === currentRecord?.type) && ((todo.title || '') === (currentRecord?.title || ''));
+						const isCurrent = !!currentRecord && todoKeyOf(todo) === todoKeyOf(currentRecord);
 						const className = isCurrent ? 'current' : undefined;
 						return createElement(
 							'li',
@@ -1461,9 +1494,7 @@ const App = () => {
 				`履歴総数: ${allList.length}`,
 				`ToDo総数: ${todos.length}`,
 				`記録開始日: ${allList[0] ? Formats.localeDateString(allList[0].start) : '取得中'}`,
-				`記録日数: ${allList.map(record => Formats.localeDateString(record.start)).reduce((acc, date) => {
-					return date === acc.date ? acc : {date, count: acc.count + 1};
-				}, {date: 'null', count: 0}).count}`,
+				`記録日数: ${recordedDayCount}`,
 				'ストレージ: ' + (usage ? Formats.bytes(usage.bytesInUse) : '計算中'),
 			].map(text => createElement('li', {}, text)),
 		),
