@@ -964,7 +964,7 @@ const App = () => {
 		const finished = [];
 		/** @type{TimeRecord[]} */
 		const running = [];
-		for (const record of allList) (!record.end && record.start > today ? running : finished).push(record);
+		for (const record of allList) (!record.end && record.start >= today ? running : finished).push(record);
 		return [finished, running];
 	}, [allList, today]);
 	const finishedTodoWorkTimes = useMemo(() => {
