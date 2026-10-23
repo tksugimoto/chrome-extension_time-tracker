@@ -23,3 +23,17 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # package.json の engines の下限と、lint と同じ版
+        node-version: [22.0.0, 24]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+      # テストは devDependencies を使わないので npm ci しない
+      - run: npm test
