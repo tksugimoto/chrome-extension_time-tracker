@@ -220,28 +220,22 @@ const loadFromStorage = (key, callback) => {
 	});
 };
 const saveToStorage = (key, value) => {
-	// TODO: 保存成功確認？
 	chrome.storage.local.set({
 		[key]: value,
+	}).catch(error => {
+		console.error('保存に失敗しました', key, error);
+		alert(`保存に失敗しました。\n直前の変更はページを再読み込みすると失われます。\n\n${error?.message ?? error}`);
 	});
 };
 
 /**
- *
+ * unlimitedStorage のため上限 (QUOTA_BYTES) は適用されない
  * @returns {Promise<{
  *	bytesInUse: number;
- *	bytesQuota: number;
  * }>}
  */
 const fetchUsage = () => {
-	return new Promise(resolve => {
-		chrome.storage.local.getBytesInUse().then(bytesInUse => {
-			resolve({
-				bytesInUse,
-				bytesQuota: chrome.storage.local.QUOTA_BYTES,
-			});
-		});
-	});
+	return chrome.storage.local.getBytesInUse().then(bytesInUse => ({bytesInUse}));
 };
 
 /**
@@ -1454,7 +1448,7 @@ const App = () => {
 				`記録日数: ${allList.map(record => Formats.localeDateString(record.start)).reduce((acc, date) => {
 					return date === acc.date ? acc : {date, count: acc.count + 1};
 				}, {date: 'null', count: 0}).count}`,
-				'ストレージ: ' + (usage ? `${Formats.percent(usage.bytesInUse / usage.bytesQuota)} (${Formats.bytes(usage.bytesInUse)} / ${Formats.bytes(usage.bytesQuota)})` : '計算中'),
+				'ストレージ: ' + (usage ? Formats.bytes(usage.bytesInUse) : '計算中'),
 			].map(text => createElement('li', {}, text)),
 		),
 		createElement(
