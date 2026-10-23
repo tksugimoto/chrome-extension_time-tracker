@@ -33,7 +33,6 @@ const renderCounts = (current, backup) => {
 	}));
 };
 
-/** 復元で消える現在のデータを、念のためダウンロードしておく（保存されたかは分からないので、リンクも残す） */
 /**
  * @param {string} exportedAt
  */
@@ -42,6 +41,7 @@ const formatExportedAt = exportedAt => {
 	return Number.isNaN(date.getTime()) ? '作成日時不明' : `${date.toLocaleString()} に作成`;
 };
 
+/** 復元で消える現在のデータを、念のためダウンロードしておく（保存されたかは分からないので、リンクも残す） */
 const downloadCurrentData = items => {
 	const link = /** @type {HTMLAnchorElement} */ (document.getElementById('before-restore-download'));
 	setBackupDownloadLink(link, items, {extensionVersion: chrome.runtime.getManifest().version});
