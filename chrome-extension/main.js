@@ -149,6 +149,14 @@ const Formats = {
 	ISODateString(date) {
 		return new Date(date.getTime() - (date.getTimezoneOffset() * 60000 )).toISOString().replace(/T.*/, '');
 	},
+	/**
+	 * toLocaleString と同じく、不正な値は例外にせず 'Invalid Date' を返す
+	 * @param {Intl.DateTimeFormat} dateTimeFormat
+	 * @param {number} timestampMs
+	 */
+	_formatTimestamp(dateTimeFormat, timestampMs) {
+		return Number.isFinite(timestampMs) ? dateTimeFormat.format(timestampMs) : 'Invalid Date';
+	},
 	_localeDeadlineDateFormat: new Intl.DateTimeFormat(undefined, {
 		month: '2-digit',
 		day: '2-digit',
@@ -157,7 +165,7 @@ const Formats = {
 	 * @param {number} timestampMs
 	 */
 	localeDeadlineDateString(timestampMs) {
-		return this._localeDeadlineDateFormat.format(timestampMs);
+		return this._formatTimestamp(this._localeDeadlineDateFormat, timestampMs);
 	},
 	_localeDateTimeFormat: new Intl.DateTimeFormat(undefined, {
 		year: 'numeric',
@@ -171,7 +179,7 @@ const Formats = {
 	 * @param {number} timestampMs
 	 */
 	localeDateTimeString(timestampMs) {
-		return this._localeDateTimeFormat.format(timestampMs);
+		return this._formatTimestamp(this._localeDateTimeFormat, timestampMs);
 	},
 	_localeDateFormat: new Intl.DateTimeFormat(undefined, {
 		year: 'numeric',
@@ -183,7 +191,7 @@ const Formats = {
 	 * @param {number} timestampMs
 	 */
 	localeDateString(timestampMs) {
-		return this._localeDateFormat.format(timestampMs);
+		return this._formatTimestamp(this._localeDateFormat, timestampMs);
 	},
 	_localeTimeFormat: new Intl.DateTimeFormat(undefined, {
 		hour: '2-digit',
@@ -194,7 +202,7 @@ const Formats = {
 	 * @param {number} timestampMs
 	 */
 	localeTimeString(timestampMs) {
-		return this._localeTimeFormat.format(timestampMs);
+		return this._formatTimestamp(this._localeTimeFormat, timestampMs);
 	},
 };
 
