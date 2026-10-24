@@ -164,7 +164,6 @@ const useList = (load, write) => {
 	useEffect(() => {
 		load(setList);
 	}, [load]);
-	const refresh = useCallback(() => setList(list => [...list]), []);
 	const add = useCallback(value => {
 		setList(list => {
 			// TODO: setStateのcallbackの中で副作用ありで良いのか確認
@@ -173,10 +172,13 @@ const useList = (load, write) => {
 			return newList;
 		});
 	}, [write]);
+	// 入力欄 (LazyInput) は後から save するので、描画したときの allList ではなく最新の一覧を書き込む
 	const save = useCallback(() => {
-		refresh();
-		write(allList);
-	}, [allList, refresh, write]);
+		setList(list => {
+			write(list);
+			return [...list];
+		});
+	}, [write]);
 	return {
 		allList,
 		add,
