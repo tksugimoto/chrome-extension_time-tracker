@@ -237,6 +237,8 @@ const useRecordList = (todos, isTodosLoaded) => {
 		});
 	}, []);
 	// 読み込み後に ToDo を変えても、記録は同じ ToDo のオブジェクトを参照し続けるので読み込み直さない
+	// ※ ToDo の編集はオブジェクトを書き換えている (FIXME: mutableをやめる) ため。ToDo のオブジェクトを作り直すようにしたら、
+	//   記録の分類・タイトルの表示は古い ToDo のままになる（集計は ID で引くので外れない）ので、記録の todo も差し替えること
 	const todosRef = useRef(todos);
 	todosRef.current = todos;
 	const load = useCallback(setList => {

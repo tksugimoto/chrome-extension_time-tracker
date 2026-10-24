@@ -233,6 +233,11 @@ describe('createTodoIndex', () => {
 		assert.equal(indexOf(TimeRecord.load({start: 1, type: 'A', title: 'x'})), undefined);
 	});
 
+	it('ToDo のオブジェクトを作り直しても、同じ ID の ToDo に集計する', () => {
+		const record = new TimeRecord(todoA2);
+		assert.equal(createTodoIndex([todoA, {...todoA2, title: '変更後'}]).indexOf(record), 1);
+	});
+
 	it('削除した ToDo を参照する記録は、分類・タイトルが一致する ToDo があっても集計しない', () => {
 		assert.equal(indexOf(new TimeRecord({...deleted, type: 'A'})), undefined);
 	});

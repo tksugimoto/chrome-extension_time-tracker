@@ -342,10 +342,10 @@ export const assignTodoIds = todos => {
 export const createTodoIndex = todos => {
 	/** @type {Map<string, number>} todoKeyOf から添字への対応（同じキーの ToDo が複数あれば先頭） */
 	const indexByKey = new Map();
-	/** @type {Map<Todo, number>} */
-	const indexByTodo = new Map();
+	/** @type {Map<number, number>} ID から添字への対応（ToDo のオブジェクトを作り直しても引けるよう、ID で引く） */
+	const indexById = new Map();
 	todos.forEach((todo, i) => {
-		indexByTodo.set(todo, i);
+		indexById.set(todo.id, i);
 		const key = todoKeyOf(todo);
 		if (!indexByKey.has(key)) indexByKey.set(key, i);
 	});
@@ -366,12 +366,12 @@ export const createTodoIndex = todos => {
 		/**
 		 * @param {Todo} todo
 		 */
-		indexOfTodo: todo => indexByTodo.get(todo),
+		indexOfTodo: todo => indexById.get(todo.id),
 		/**
 		 * @param {TimeRecord} record
 		 * @returns {number | undefined}
 		 */
-		indexOf: record => record.todo ? indexByTodo.get(record.todo) : indexByKey.get(todoKeyOf(record)),
+		indexOf: record => record.todo ? indexById.get(record.todo.id) : indexByKey.get(todoKeyOf(record)),
 	};
 };
 
