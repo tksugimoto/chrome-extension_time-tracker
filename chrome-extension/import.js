@@ -1,5 +1,5 @@
 /* global chrome */
-import {LIST_KEYS, Lists, parseBackup, restoreBackup, setBackupDownloadLink, summarize} from './backup.js';
+import {Lists, parseBackup, restoreBackup, setBackupDownloadLink, summarize} from './backup.js';
 
 const fileInput = /** @type {HTMLInputElement} */ (document.getElementById('file'));
 const statusElement = document.getElementById('status');
@@ -60,7 +60,7 @@ fileInput.addEventListener('change', () => {
 	}
 	Promise.all([
 		file.text(),
-		chrome.storage.local.get(LIST_KEYS),
+		chrome.storage.local.get(null),
 	]).then(([text, currentLists]) => {
 		if (selectionId !== fileSelectionId) return;
 		const backup = parseBackup(text);

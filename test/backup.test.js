@@ -11,6 +11,7 @@ import {
 	keysToRemove,
 	restoreBackup,
 } from '../chrome-extension/backup.js';
+import {splitLegacyRecords} from '../chrome-extension/record-storage.js';
 
 const sampleData = () => ({
 	record: [
@@ -35,7 +36,7 @@ describe('createBackup', () => {
 		const data = sampleData();
 		assert.deepEqual(validBackup(data), {
 			format: 'time-tracker-backup',
-			version: 1,
+			version: 2,
 			extensionVersion: '0.1.0',
 			exportedAt: '2026-10-23T01:02:03.000Z',
 			data,
@@ -122,7 +123,7 @@ describe('parseBackup', () => {
 		['version が文字列', toText({...validBackup(), version: '1'}), /version: "1"\) が不正/],
 		['version が小数', toText({...validBackup(), version: 1.5}), /が不正/],
 		['version が 0', toText({...validBackup(), version: 0}), /が不正/],
-		['version が新しい', toText({...validBackup(), version: BACKUP_VERSION + 1}), /新しい形式 \(version: 2\).*拡張機能を更新/],
+		['version が新しい', toText({...validBackup(), version: BACKUP_VERSION + 1}), /新しい形式 \(version: 3\).*拡張機能を更新/],
 		['data がない', toText({...validBackup(), data: undefined}), /データ \(data\) がありません/],
 		['data が配列', toText({...validBackup(), data: []}), /データ \(data\) がありません/],
 		['data が null', toText({...validBackup(), data: null}), /データ \(data\) がありません/],
@@ -131,24 +132,24 @@ describe('parseBackup', () => {
 		['todo が配列でない', toText(validBackup({todo: 'x'})), /ToDo \(todo\) が配列ではありません/],
 		['type が配列でない', toText(validBackup({type: 1})), /分類 \(type\) が配列ではありません/],
 		['todo-group が配列でない', toText(validBackup({'todo-group': {}})), /ToDo グループ \(todo-group\) が配列ではありません/],
-		['記録がオブジェクトでない', toText(validBackup({record: [null]})), /記録の 1 件目が不正です: オブジェクトではありません/],
-		['記録の start がない', toText(validBackup({record: [{type: 'a'}]})), /記録の 1 件目.*開始時刻/],
+		['記録がオブジェクトでない', toText(validBackup({record: [null]})), /記録 \(record\) の 1 件目が不正です: オブジェクトではありません/],
+		['記録の start がない', toText(validBackup({record: [{type: 'a'}]})), /記録 \(record\) の 1 件目.*開始時刻/],
 		['記録の start が文字列', toText(validBackup({record: [{start: '1', type: 'a'}]})), /開始時刻/],
 		['記録の end が文字列', toText(validBackup({record: [{start: 1, end: '2', type: 'a'}]})), /終了時刻/],
 		['記録の type がない', toText(validBackup({record: [{start: 1}]})), /分類/],
-		['2件目の記録が不正', toText(validBackup({record: [{start: 1, type: 'a'}, {start: 2}]})), /記録の 2 件目が不正です/],
-		['ToDo がオブジェクトでない', toText(validBackup({todo: ['x']})), /ToDoの 1 件目が不正です: オブジェクトではありません/],
-		['ToDo の type がない', toText(validBackup({todo: [{title: 'a'}]})), /ToDoの 1 件目.*分類/],
-		['ToDo の title がない', toText(validBackup({todo: [{type: 'a', title: 'b'}, {type: 'a'}]})), /ToDoの 2 件目.*タイトル/],
-		['分類が文字列（{name} でない）', toText(validBackup({type: ['開発']})), /分類の 1 件目が不正です: オブジェクトではありません/],
-		['分類の name が数値', toText(validBackup({type: [{name: 1}]})), /分類の 1 件目.*名前/],
-		['記録の title が数値', toText(validBackup({record: [{start: 1, type: 'a', title: 1}]})), /記録の 1 件目.*タイトル \(title\)/],
-		['記録の memo が配列', toText(validBackup({record: [{start: 1, type: 'a', memo: []}]})), /記録の 1 件目.*メモ \(memo\)/],
-		['ToDo の memo が数値', toText(validBackup({todo: [{type: 'a', title: 'b', memo: 1}]})), /ToDoの 1 件目.*メモ \(memo\)/],
-		['ToDo の group が数値', toText(validBackup({todo: [{type: 'a', title: 'b', group: 1}]})), /ToDoの 1 件目.*グループ \(group\)/],
-		['ToDo の deadline が文字列', toText(validBackup({todo: [{type: 'a', title: 'b', deadline: '2026-10-23'}]})), /ToDoの 1 件目.*期限 \(deadline\)/],
-		['ToDo の estimation が真偽値', toText(validBackup({todo: [{type: 'a', title: 'b', estimation: true}]})), /ToDoの 1 件目.*見積もり \(estimation\)/],
-		['ToDo グループがオブジェクト', toText(validBackup({'todo-group': [{name: 'x'}]})), /ToDo グループの 1 件目が不正です: 文字列ではありません/],
+		['2件目の記録が不正', toText(validBackup({record: [{start: 1, type: 'a'}, {start: 2}]})), /記録 \(record\) の 2 件目が不正です/],
+		['ToDo がオブジェクトでない', toText(validBackup({todo: ['x']})), /ToDo \(todo\) の 1 件目が不正です: オブジェクトではありません/],
+		['ToDo の type がない', toText(validBackup({todo: [{title: 'a'}]})), /ToDo \(todo\) の 1 件目.*分類/],
+		['ToDo の title がない', toText(validBackup({todo: [{type: 'a', title: 'b'}, {type: 'a'}]})), /ToDo \(todo\) の 2 件目.*タイトル/],
+		['分類が文字列（{name} でない）', toText(validBackup({type: ['開発']})), /分類 \(type\) の 1 件目が不正です: オブジェクトではありません/],
+		['分類の name が数値', toText(validBackup({type: [{name: 1}]})), /分類 \(type\) の 1 件目.*名前/],
+		['記録の title が数値', toText(validBackup({record: [{start: 1, type: 'a', title: 1}]})), /記録 \(record\) の 1 件目.*タイトル \(title\)/],
+		['記録の memo が配列', toText(validBackup({record: [{start: 1, type: 'a', memo: []}]})), /記録 \(record\) の 1 件目.*メモ \(memo\)/],
+		['ToDo の memo が数値', toText(validBackup({todo: [{type: 'a', title: 'b', memo: 1}]})), /ToDo \(todo\) の 1 件目.*メモ \(memo\)/],
+		['ToDo の group が数値', toText(validBackup({todo: [{type: 'a', title: 'b', group: 1}]})), /ToDo \(todo\) の 1 件目.*グループ \(group\)/],
+		['ToDo の deadline が文字列', toText(validBackup({todo: [{type: 'a', title: 'b', deadline: '2026-10-23'}]})), /ToDo \(todo\) の 1 件目.*期限 \(deadline\)/],
+		['ToDo の estimation が真偽値', toText(validBackup({todo: [{type: 'a', title: 'b', estimation: true}]})), /ToDo \(todo\) の 1 件目.*見積もり \(estimation\)/],
+		['ToDo グループがオブジェクト', toText(validBackup({'todo-group': [{name: 'x'}]})), /ToDo グループ \(todo-group\) の 1 件目が不正です: 文字列ではありません/],
 	];
 	for (const [name, text, message] of invalidCases) {
 		it(`読み込めない: ${name}`, () => {
@@ -242,11 +243,11 @@ describe('restoreBackup', () => {
 		assert.deepEqual(storage.calls, [
 			['get', null],
 			['saveCurrentData'],
-			['set', Object.keys(data)],
+			['set', Object.keys(splitLegacyRecords(data))],
 			['remove', ['setting.only-current']],
 		]);
 		assert.deepEqual(saved, [current()]);
-		assert.deepEqual(storage.items, data);
+		assert.deepEqual(storage.items, splitLegacyRecords(data));
 	});
 
 	it('書き込みに失敗したら、キーを消さずに reject する', async () => {
@@ -259,7 +260,7 @@ describe('restoreBackup', () => {
 	it('キーの削除に失敗したら reject する（バックアップの内容は書き込み済み）', async () => {
 		const storage = createFakeStorage(current(), {failRemove: true});
 		await assert.rejects(restoreBackup(sampleData(), {storage, saveCurrentData: () => {}}), /remove failed/);
-		assert.deepEqual(storage.items, {...sampleData(), 'setting.only-current': true});
+		assert.deepEqual(storage.items, {...splitLegacyRecords(sampleData()), 'setting.only-current': true});
 	});
 
 	it('現在のデータの保存に失敗したら、書き換えない', async () => {

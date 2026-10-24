@@ -10,6 +10,7 @@ import {
 	calculateRemainingTime,
 	escapeCharacterClassMetaChar,
 } from './utils.js';
+import {loadRecords, planRecordSave} from './record-storage.js';
 
 /** @typedef {import('./utils.js').Todo} Todo */
 
@@ -85,13 +86,23 @@ const loadFromStorage = (key, callback) => {
 		callback(items[key]);
 	});
 };
+/**
+ * items を書き込んでから removeKeys を消す
+ * @param {Object<string, any>} items
+ * @param {string[]=} removeKeys
+ * @returns {Promise<void>} 失敗したときは通知してから reject する
+ */
+const writeToStorage = (items, removeKeys = []) => {
+	return chrome.storage.local.set(items)
+		.then(() => removeKeys.length ? chrome.storage.local.remove(removeKeys) : undefined)
+		.catch(error => {
+			console.error('保存に失敗しました', Object.keys(items), removeKeys, error);
+			alert(`保存に失敗しました。\n直前の変更はページを再読み込みすると失われます。\n\n${error?.message ?? error}`);
+			throw error;
+		});
+};
 const saveToStorage = (key, value) => {
-	chrome.storage.local.set({
-		[key]: value,
-	}).catch(error => {
-		console.error('保存に失敗しました', key, error);
-		alert(`保存に失敗しました。\n直前の変更はページを再読み込みすると失われます。\n\n${error?.message ?? error}`);
-	});
+	writeToStorage({[key]: value}).catch(() => {});
 };
 
 /**
@@ -167,6 +178,56 @@ const useStorageList = (storageKey, {
 		refresh();
 		saveToStorage(storageKey, allList);
 	}, [allList, refresh, storageKey]);
+	return {
+		allList,
+		add,
+		save,
+	};
+};
+
+/**
+ * 記録の一覧。useStorageList と同じく使えるが、保存は開始月ごとのキーに分け、変わった月だけ書き込む
+ * @returns {ReturnType<typeof useStorageList<TimeRecord>>}
+ */
+const useRecordList = () => {
+	const [allList, setList] = useState(() => {
+		/** @type {TimeRecord[]} */
+		const empty = [];
+		return empty;
+	});
+	/** 月ごとのキーに前回保存した JSON（保存のたびに作り直す） */
+	const savedJsonRef = useRef(new Map());
+	const write = useCallback(list => {
+		const {items, removeKeys, savedJson} = planRecordSave(list, savedJsonRef.current);
+		if (Object.keys(items).length === 0 && removeKeys.length === 0) return;
+		savedJsonRef.current = savedJson;
+		writeToStorage(items, removeKeys).catch(() => {
+			// 次の保存で書き直すよう、書き込めなかった月は保存済みとみなさない
+			for (const key of Object.keys(items)) savedJsonRef.current.delete(key);
+		});
+	}, []);
+	useEffect(() => {
+		chrome.storage.local.get(null, items => {
+			const {records, savedJson, needsMigration} = loadRecords(items);
+			savedJsonRef.current = savedJson;
+			const list = records.map(TimeRecord.load);
+			setList(list);
+			// 以前の形式 (1つのキーに全件) なら、月ごとのキーに移す
+			if (needsMigration) write(list);
+		});
+	}, [write]);
+	const add = useCallback(value => {
+		setList(list => {
+			// TODO: setStateのcallbackの中で副作用ありで良いのか確認
+			const newList = [...list, value];
+			write(newList);
+			return newList;
+		});
+	}, [write]);
+	const save = useCallback(() => {
+		setList(list => [...list]);
+		write(allList);
+	}, [allList, write]);
 	return {
 		allList,
 		add,
@@ -755,9 +816,7 @@ const App = () => {
 		allList,
 		add,
 		save,
-	} = useStorageList('record', {
-		transform: TimeRecord.load,
-	});
+	} = useRecordList();
 
 	const [isTypeEditMode, setTypeEditMode] = useState(false);
 	const [isTodoEditMode, setTodoEditMode] = useState(false);

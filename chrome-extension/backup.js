@@ -1,7 +1,9 @@
 // バックアップファイルの作成と読み込み。chrome API に依存しない処理だけを置く（Node のテストからも読み込む）
+import {isRecordKey, splitLegacyRecords} from './record-storage.js';
 
 export const BACKUP_FORMAT = 'time-tracker-backup';
-export const BACKUP_VERSION = 1;
+/** 2: 記録を開始月ごとのキー (record.YYYY-MM) に分けた。1 (record に全件) も読み込める */
+export const BACKUP_VERSION = 2;
 
 /**
  * インポートするときに、ファイルの種類と形式の版を見分けられるようにメタ情報を付ける
@@ -58,7 +60,7 @@ const isString = value => typeof value === 'string';
 const isOptional = (value, isValid) => value == null || isValid(value);
 
 /**
- * 一覧（配列）で保存しているキーと、その要素が読み込めない場合に理由を返す関数
+ * 一覧（配列）で保存しているキー（記録は月ごとのキーに分けて保存している）と、その要素が読み込めない場合に理由を返す関数
  * hasDefault: 保存されていないとき、main.js が既定の一覧を使う
  * @type {Object<string, {label: string, hasDefault?: boolean, findProblem: function(any): (string | undefined)}>}
  */
@@ -104,7 +106,15 @@ export const Lists = {
 	},
 };
 
-export const LIST_KEYS = Object.keys(Lists);
+/**
+ * storage のキーが一覧なら、Lists のキーを返す
+ * @param {string} key
+ * @returns {string | undefined}
+ */
+const listKeyOf = key => {
+	if (isRecordKey(key)) return 'record';
+	if (Object.hasOwn(Lists, key)) return key;
+};
 
 /**
  * バックアップファイルの中身を検証して返す。読み込めない場合は理由を message に持つ Error を投げる
@@ -131,12 +141,14 @@ export const parseBackup = text => {
 	if (!isPlainObject(data)) {
 		throw new Error('バックアップにデータ (data) がありません。');
 	}
-	for (const [key, {label, findProblem}] of Object.entries(Lists)) {
-		if (!Object.hasOwn(data, key)) continue;
-		if (!Array.isArray(data[key])) throw new Error(`${label} (${key}) が配列ではありません。`);
-		data[key].forEach((item, index) => {
+	for (const [key, list] of Object.entries(data)) {
+		const listKey = listKeyOf(key);
+		if (!listKey) continue;
+		const {label, findProblem} = Lists[listKey];
+		if (!Array.isArray(list)) throw new Error(`${label} (${key}) が配列ではありません。`);
+		list.forEach((item, index) => {
 			const problem = findProblem(item);
-			if (problem) throw new Error(`${label}の ${index + 1} 件目が不正です: ${problem}`);
+			if (problem) throw new Error(`${label} (${key}) の ${index + 1} 件目が不正です: ${problem}`);
 		});
 	}
 	return backup;
@@ -148,9 +160,15 @@ export const parseBackup = text => {
  * @returns {Object<string, string>}
  */
 export const summarize = data => {
+	/** @type {Map<string, number>} 保存されている一覧の件数（記録は月ごとのキーの合計） */
+	const counts = new Map();
+	for (const [key, list] of Object.entries(data)) {
+		const listKey = listKeyOf(key);
+		if (listKey) counts.set(listKey, (counts.get(listKey) ?? 0) + list.length);
+	}
 	return Object.fromEntries(Object.entries(Lists).map(([key, {hasDefault}]) => {
-		if (!Object.hasOwn(data, key)) return [key, hasDefault ? '初期値' : '0 件'];
-		return [key, `${data[key].length} 件`];
+		if (!counts.has(key)) return [key, hasDefault ? '初期値' : '0 件'];
+		return [key, `${counts.get(key)} 件`];
 	}));
 };
 
@@ -165,13 +183,15 @@ export const keysToRemove = (currentKeys, data) => {
 
 /**
  * バックアップの内容で storage を置き換える
- * @param {Object<string, any>} data バックアップの data
+ * @param {Object<string, any>} backupData バックアップの data
  * @param {Object} param1
  * @param {Pick<chrome.storage.StorageArea, 'get' | 'set' | 'remove'>} param1.storage
  * @param {function(Object<string, any>): void} param1.saveCurrentData 書き換える前の全データを受け取り、念のため保存する
  * @returns {Promise<void>}
  */
-export const restoreBackup = (data, {storage, saveCurrentData}) => {
+export const restoreBackup = (backupData, {storage, saveCurrentData}) => {
+	// 以前の形式 (version 1) のバックアップも、今の形式で書き込む
+	const data = splitLegacyRecords(backupData);
 	return storage.get(null).then(currentItems => {
 		saveCurrentData(currentItems);
 		// 先に書き込んでから不要なキーを消す（clear してから書き込むと、書き込みに失敗したときに全データを失う）
