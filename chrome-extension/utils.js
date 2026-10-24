@@ -271,6 +271,8 @@ export const createDebouncedWriter = (write, delayMs) => {
 	/** @type {T} */
 	let pendingValue;
 	const cancel = () => {
+		// Node.js 22.0.0 の mock.timers は clearTimeout(undefined) で例外になる
+		if (timer === undefined) return;
 		clearTimeout(timer);
 		timer = undefined;
 	};
