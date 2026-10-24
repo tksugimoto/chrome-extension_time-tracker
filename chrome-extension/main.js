@@ -144,29 +144,60 @@ const useSetting = (settingKey, defaultValue) => {
 };
 
 /**
+ * 保存する一覧。読み込み方と書き込み方は呼び出し側が決める
  * @template T
- * @param {string} storageKey
- * @param {Object} options
- * @param {function(any[]): T[]=} options.normalize 読み込んだ一覧を今の形式にする。変わったら（別の配列を返したら）保存し直す
- * @param {Object[]=} options.defaultValue
+ * @param {function(function(T[]): void): void} load 読み込んだ一覧を渡す。変わったら読み込み直す
+ * @param {function(T[]): void} write
  * @returns {{
  * 	allList: T[]
- * 	isLoaded: boolean
  * 	add: function(T): void
  * 	save: function(): void
  * }}
  */
-const useStorageList = (storageKey, {
-	normalize,
-	defaultValue,
-} = {}) => {
+const useList = (load, write) => {
 	const [allList, setList] = useState(() => {
 		// 変数に入れないと any ではなく never 型となってしまい、 setList 部分で型エラーとなる問題対策
 		const empty = [];
 		return empty;
 	});
-	const [isLoaded, setLoaded] = useState(false);
 	useEffect(() => {
+		load(setList);
+	}, [load]);
+	const refresh = useCallback(() => setList(list => [...list]), []);
+	const add = useCallback(value => {
+		setList(list => {
+			// TODO: setStateのcallbackの中で副作用ありで良いのか確認
+			const newList = [...list, value];
+			write(newList);
+			return newList;
+		});
+	}, [write]);
+	const save = useCallback(() => {
+		refresh();
+		write(allList);
+	}, [allList, refresh, write]);
+	return {
+		allList,
+		add,
+		save,
+	};
+};
+
+/**
+ * 1つのキーに保存する一覧
+ * @template T
+ * @param {string} storageKey
+ * @param {Object} options
+ * @param {function(any[]): T[]=} options.normalize 読み込んだ一覧を今の形式にする。変わったら（別の配列を返したら）保存し直す
+ * @param {Object[]=} options.defaultValue
+ * @returns {ReturnType<typeof useList<T>> & {isLoaded: boolean}}
+ */
+const useStorageList = (storageKey, {
+	normalize,
+	defaultValue,
+} = {}) => {
+	const [isLoaded, setLoaded] = useState(false);
+	const load = useCallback(setList => {
 		loadFromStorage(storageKey, savedList => {
 			const list = savedList ?? defaultValue ?? [];
 			const normalized = normalize ? normalize(list) : list;
@@ -175,40 +206,18 @@ const useStorageList = (storageKey, {
 			setLoaded(true);
 		});
 	}, [storageKey, defaultValue, normalize]);
-	const refresh = useCallback(() => setList(list => [...list]), []);
-	const add = useCallback(value => {
-		setList(list => {
-			// TODO: setStateのcallbackの中で副作用ありで良いのか確認
-			const newList = [...list, value];
-			saveToStorage(storageKey, newList);
-			return newList;
-		});
-	}, [storageKey]);
-	const save = useCallback(() => {
-		refresh();
-		saveToStorage(storageKey, allList);
-	}, [allList, refresh, storageKey]);
-	return {
-		allList,
-		isLoaded,
-		add,
-		save,
-	};
+	const write = useCallback(list => saveToStorage(storageKey, list), [storageKey]);
+	return {...useList(load, write), isLoaded};
 };
 
 /**
- * 記録の一覧。useStorageList と同じく使えるが、保存は開始月ごとのキーに分け、変わった月だけ書き込む
+ * 記録の一覧。保存は開始月ごとのキーに分け、変わった月だけ書き込む
  * 記録は ToDo を参照するため、ToDo を読み込んでから読み込む
  * @param {Todo[]} todos 削除した ToDo も含む
  * @param {boolean} isTodosLoaded
- * @returns {Omit<ReturnType<typeof useStorageList<TimeRecord>>, 'isLoaded'>}
+ * @returns {ReturnType<typeof useList<TimeRecord>>}
  */
 const useRecordList = (todos, isTodosLoaded) => {
-	const [allList, setList] = useState(() => {
-		/** @type {TimeRecord[]} */
-		const empty = [];
-		return empty;
-	});
 	/**
 	 * 月ごとのキーに前回保存した JSON（保存のたびに作り直す）
 	 * 読み込むまでは null（storage の内容が分からないうちに書き込むと、その月の他の記録を消してしまう）
@@ -227,12 +236,13 @@ const useRecordList = (todos, isTodosLoaded) => {
 			markUnsaved(savedJsonRef.current, {items, removeKeys});
 		});
 	}, []);
-	const isLoadStartedRef = useRef(false);
-	useEffect(() => {
-		// 読み込み後に ToDo を変えても、記録は同じ ToDo のオブジェクトを参照し続けるので読み込み直さない
-		if (!isTodosLoaded || isLoadStartedRef.current) return;
-		isLoadStartedRef.current = true;
+	// 読み込み後に ToDo を変えても、記録は同じ ToDo のオブジェクトを参照し続けるので読み込み直さない
+	const todosRef = useRef(todos);
+	todosRef.current = todos;
+	const load = useCallback(setList => {
+		if (!isTodosLoaded) return;
 		chrome.storage.local.get(null, items => {
+			const todos = todosRef.current;
 			const todoById = new Map(todos.map(todo => [todo.id, todo]));
 			const {records, savedJson} = loadRecords(items, record => TimeRecord.load(record, todoById));
 			// 項目名のあるオブジェクト（以前の形式）で保存している月は、読み込んだ後の JSON が同じでも配列で保存し直す
@@ -245,24 +255,8 @@ const useRecordList = (todos, isTodosLoaded) => {
 			// 以前の形式 (1つのキーに全件・項目名のあるオブジェクト・ToDo を参照しない) から変わった月を保存し直す（なければ何も書き込まない）
 			write(records);
 		});
-	}, [todos, isTodosLoaded, write]);
-	const add = useCallback(value => {
-		setList(list => {
-			// TODO: setStateのcallbackの中で副作用ありで良いのか確認
-			const newList = [...list, value];
-			write(newList);
-			return newList;
-		});
-	}, [write]);
-	const save = useCallback(() => {
-		setList(list => [...list]);
-		write(allList);
-	}, [allList, write]);
-	return {
-		allList,
-		add,
-		save,
-	};
+	}, [isTodosLoaded, write]);
+	return useList(load, write);
 };
 
 const titleSize = 40;
