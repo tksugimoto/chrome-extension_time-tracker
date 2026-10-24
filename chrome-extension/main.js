@@ -78,11 +78,11 @@ const is勤務外 = type => {
 };
 
 // バックアップから復元されたら、古いデータで上書きしないよう読み込み直す (import.js から送られる)
-// 復元したデータを、まだ書き込んでいない入力 (useDebouncedWrite) で上書きしないよう捨てる
-let isDiscardingPendingWrites = false;
+// 復元したデータを、まだ反映していない入力 (LazyInput) で上書きしないよう捨てる
+let isDiscardingPendingInputs = false;
 chrome.runtime.onMessage.addListener(message => {
 	if (message?.type !== 'backup-restored') return;
-	isDiscardingPendingWrites = true;
+	isDiscardingPendingInputs = true;
 	location.reload();
 });
 
@@ -144,33 +144,6 @@ const useSetting = (settingKey, defaultValue) => {
 	return [value, update];
 };
 
-/** 入力が止まってから書き込むまでの時間 */
-const writeDelayMs = 1000;
-
-/**
- * 文字入力のたびに全件を書き込まないよう、書き込みを入力が止まるまで遅らせる
- * ページが隠れる・閉じるとき (閉じるときも先に hidden になる) は、待たずにすぐ書き込む
- * @template T
- * @param {function(T): void} write
- * @returns {ReturnType<typeof createDebouncedWriter<T>>}
- */
-const useDebouncedWrite = write => {
-	const writer = useMemo(() => createDebouncedWriter(value => {
-		if (!isDiscardingPendingWrites) write(value);
-	}, writeDelayMs), [write]);
-	useEffect(() => {
-		const onVisibilityChange = () => {
-			if (document.visibilityState === 'hidden') writer.flush();
-		};
-		document.addEventListener('visibilitychange', onVisibilityChange);
-		return () => {
-			document.removeEventListener('visibilitychange', onVisibilityChange);
-			writer.flush();
-		};
-	}, [writer]);
-	return writer;
-};
-
 /**
  * @template T
  * @param {string} storageKey
@@ -181,8 +154,7 @@ const useDebouncedWrite = write => {
  * 	allList: T[]
  * 	add: function(T): void
  * 	save: function(): void
- * 	saveSoon: function(): void
- * }} saveSoon は文字入力など続けて変わるときの save（書き込みは入力が止まってから）
+ * }}
  */
 const useStorageList = (storageKey, {
 	transform,
@@ -199,28 +171,22 @@ const useStorageList = (storageKey, {
 		});
 	}, [storageKey, defaultValue, transform]);
 	const refresh = useCallback(() => setList(list => [...list]), []);
-	const {writeSoon, writeNow} = useDebouncedWrite(useCallback(list => saveToStorage(storageKey, list), [storageKey]));
 	const add = useCallback(value => {
 		setList(list => {
 			// TODO: setStateのcallbackの中で副作用ありで良いのか確認
 			const newList = [...list, value];
-			writeNow(newList);
+			saveToStorage(storageKey, newList);
 			return newList;
 		});
-	}, [writeNow]);
+	}, [storageKey]);
 	const save = useCallback(() => {
 		refresh();
-		writeNow(allList);
-	}, [allList, refresh, writeNow]);
-	const saveSoon = useCallback(() => {
-		refresh();
-		writeSoon(allList);
-	}, [allList, refresh, writeSoon]);
+		saveToStorage(storageKey, allList);
+	}, [allList, refresh, storageKey]);
 	return {
 		allList,
 		add,
 		save,
-		saveSoon,
 	};
 };
 
@@ -258,29 +224,71 @@ const useRecordList = () => {
 			if (needsMigration) write(list);
 		});
 	}, [write]);
-	const {writeSoon, writeNow} = useDebouncedWrite(write);
 	const add = useCallback(value => {
 		setList(list => {
 			// TODO: setStateのcallbackの中で副作用ありで良いのか確認
 			const newList = [...list, value];
-			writeNow(newList);
+			write(newList);
 			return newList;
 		});
-	}, [writeNow]);
+	}, [write]);
 	const save = useCallback(() => {
 		setList(list => [...list]);
-		writeNow(allList);
-	}, [allList, writeNow]);
-	const saveSoon = useCallback(() => {
-		setList(list => [...list]);
-		writeSoon(allList);
-	}, [allList, writeSoon]);
+		write(allList);
+	}, [allList, write]);
 	return {
 		allList,
 		add,
 		save,
-		saveSoon,
 	};
+};
+
+/** 入力が止まってから反映するまでの時間 */
+const inputCommitDelayMs = 1000;
+
+/**
+ * 文字入力のたびに全件を保存・再描画しないよう、入力中の文字はこの入力欄の中だけで持つ input
+ * onCommit は入力が止まったとき・入力欄から離れたとき・ページが隠れたとき (閉じるときも先に hidden になる) に呼ぶ
+ * @param {{
+ * 	value: string;
+ * 	onCommit: function(string): void;
+ * 	inputRef?: any; // TODO: type定義
+ * } & Object<string, any>} param0 そのほかは input にそのまま渡す
+ */
+const LazyInput = ({
+	value,
+	onCommit,
+	inputRef,
+	...props
+}) => {
+	const [text, setText] = useState(value);
+	// 反映した値や、ほかから変わった値を表示する
+	useEffect(() => setText(value), [value]);
+	const onCommitRef = useRef(onCommit);
+	onCommitRef.current = onCommit;
+	const writer = useMemo(() => createDebouncedWriter(newText => {
+		if (!isDiscardingPendingInputs) onCommitRef.current(newText);
+	}, inputCommitDelayMs), []);
+	useEffect(() => {
+		const onVisibilityChange = () => {
+			if (document.visibilityState === 'hidden') writer.flush();
+		};
+		document.addEventListener('visibilitychange', onVisibilityChange);
+		return () => {
+			document.removeEventListener('visibilitychange', onVisibilityChange);
+			writer.flush();
+		};
+	}, [writer]);
+	return createElement('input', {
+		...props,
+		ref: inputRef,
+		value: text,
+		onChange: e => {
+			setText(e.target.value);
+			writer.writeSoon(e.target.value);
+		},
+		onBlur: writer.flush,
+	});
 };
 
 const titleSize = 40;
@@ -291,7 +299,6 @@ const titleSize = 40;
  * @param {{name: string}[]} param0.types
  * @param {TimeRecord} param0.record
  * @param {function(): void} param0.save
- * @param {function(): void} param0.saveSoon
  * @param {function(TimeRecord): void=} param0.editTime
  * @param {function(TimeRecord): void=} param0.finishAndAddRecord
  * @param {boolean=} param0.isEditable
@@ -303,7 +310,6 @@ const RecordView = ({
 	types,
 	record,
 	save,
-	saveSoon,
 	editTime,
 	finishAndAddRecord,
 	isEditable = true, // FIXME: 名前の適切化
@@ -343,28 +349,28 @@ const RecordView = ({
 			}),
 		),
 		createElement(
-			'input',
+			LazyInput,
 			{
-				ref: titleRef,
+				inputRef: titleRef,
 				value: record.title || '',
 				placeholder: 'タイトル',
 				size: titleSize,
-				onChange: e => {
+				onCommit: title => {
 					// FIXME: mutableをやめる
-					record.setTitle(e.target.value);
-					saveSoon();
+					record.setTitle(title);
+					save();
 				},
 			},
 		),
 		createElement(
-			'input',
+			LazyInput,
 			{
 				value: record.memo || '',
 				placeholder: 'メモ',
-				onChange: e => {
+				onCommit: memo => {
 					// FIXME: mutableをやめる
-					record.setMemo(e.target.value);
-					saveSoon();
+					record.setMemo(memo);
+					save();
 				},
 			},
 		),
@@ -481,7 +487,6 @@ const groupNothingName = '(グループなし)';
  * 	todos: Todo[],
  * 	todoGroups: string[],
  * 	saveTodo: function(): void
- * 	saveTodoSoon: function(): void
  * 	finishAndAddRecord: function(TimeRecord | Todo): void
  * 	types: {name: string}[];
  * 	todoWorkTimeTatal: number;
@@ -499,7 +504,6 @@ const TodoRow = ({
 	todos,
 	todoGroups,
 	saveTodo,
-	saveTodoSoon,
 	finishAndAddRecord,
 	types,
 	todoWorkTimeTatal,
@@ -583,17 +587,16 @@ const TodoRow = ({
 		}, Formats.seconds(todoWorkTimeTatal)),
 		usingTodoEstimation && createElement(React.Fragment, {},
 			' / ',
-			isTodoEditMode && createElement('input', {
+			isTodoEditMode && createElement(LazyInput, {
 				type: 'text',
 				value: todo.estimation,
 				placeholder: '見積もり',
 				size: 4,
-				onChange: e => {
+				onCommit: value => {
 					// FIXME: mutableをやめる
-					const value = e.target.value;
 					const num = Number(value);
 					todo.estimation = Number.isNaN(num) || num < 0 ? undefined : value;
-					saveTodoSoon();
+					saveTodo();
 				},
 			}),
 			isTodoEditMode && '時間',
@@ -619,15 +622,15 @@ const TodoRow = ({
 			}),
 		) : todo.type,
 		isTodoEditMode ? createElement(
-			'input',
+			LazyInput,
 			{
 				value: todo.title,
 				placeholder: 'タイトル',
 				size: titleSize,
-				onChange: e => {
+				onCommit: title => {
 					// FIXME: mutableをやめる
-					todo.title = e.target.value;
-					saveTodoSoon();
+					todo.title = title;
+					saveTodo();
 				},
 			},
 		) : (
@@ -641,14 +644,14 @@ const TodoRow = ({
 			) : `(${todo.title || '-'})`
 		),
 		isTodoEditMode ? createElement(
-			'input',
+			LazyInput,
 			{
 				value: todo.memo,
 				placeholder: 'メモ / URL',
-				onChange: e => {
+				onCommit: memo => {
 					// FIXME: mutableをやめる
-					todo.memo = e.target.value;
-					saveTodoSoon();
+					todo.memo = memo;
+					saveTodo();
 				},
 			},
 		) : hasUrlMemo ? '' : todo.memo,
@@ -838,7 +841,6 @@ const App = () => {
 		allList: todos,
 		add: addTodo,
 		save: saveTodo,
-		saveSoon: saveTodoSoon,
 	} = useStorageList('todo');
 	const [newTodoType, setNewTodoType] = useState('');
 	/** @type{ReturnType<typeof useRef<HTMLInputElement>>} */
@@ -869,7 +871,6 @@ const App = () => {
 		allList,
 		add,
 		save,
-		saveSoon,
 	} = useRecordList();
 
 	const [isTypeEditMode, setTypeEditMode] = useState(false);
@@ -1200,7 +1201,6 @@ const App = () => {
 									todos,
 									todoGroups,
 									saveTodo,
-									saveTodoSoon,
 									finishAndAddRecord,
 									types,
 									todoWorkTimeTatal,
@@ -1375,7 +1375,7 @@ const App = () => {
 			),
 		),
 		createElement('h2', {}, '現在'),
-		currentRecord ? createElement(RecordView, {titleRef: currentTitleRef, types, record: currentRecord, save, saveSoon, editTime, hideDate: true}) : '未開始',
+		currentRecord ? createElement(RecordView, {titleRef: currentTitleRef, types, record: currentRecord, save, editTime, hideDate: true}) : '未開始',
 		createElement('h2', {}, '履歴'),
 		createElement('ol', {}, list.map((record) => {
 			return createElement(
@@ -1383,7 +1383,7 @@ const App = () => {
 				{
 					key: record.start,
 				},
-				createElement(RecordView, {types, record, save, saveSoon, editTime, finishAndAddRecord, hideDate: true}),
+				createElement(RecordView, {types, record, save, editTime, finishAndAddRecord, hideDate: true}),
 			);
 		})),
 		createElement('h2', {}, '集計結果'),
@@ -1482,7 +1482,7 @@ const App = () => {
 									{
 										key: record.start,
 									},
-									createElement(RecordView, {types, record, save, saveSoon, editTime, finishAndAddRecord, isEditable: false}),
+									createElement(RecordView, {types, record, save, editTime, finishAndAddRecord, isEditable: false}),
 								);
 							})),
 						);
@@ -1495,7 +1495,7 @@ const App = () => {
 						{
 							key: record.start,
 						},
-						createElement(RecordView, {types, record, save, saveSoon, editTime, finishAndAddRecord, isEditable: false}),
+						createElement(RecordView, {types, record, save, editTime, finishAndAddRecord, isEditable: false}),
 					);
 				})),
 			);
