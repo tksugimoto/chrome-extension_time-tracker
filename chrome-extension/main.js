@@ -198,24 +198,22 @@ const useRecordList = () => {
 	/** 月ごとのキーに前回保存した JSON（保存のたびに作り直す） */
 	const savedJsonRef = useRef(new Map());
 	const write = useCallback(list => {
-		const {items, removeKeys, savedJson} = planRecordSave(list, savedJsonRef.current);
+		const previousSavedJson = savedJsonRef.current;
+		const {items, removeKeys, savedJson} = planRecordSave(list, previousSavedJson);
 		if (Object.keys(items).length === 0 && removeKeys.length === 0) return;
 		savedJsonRef.current = savedJson;
 		writeToStorage(items, removeKeys).catch(() => {
-			// 次の保存でやり直すよう、書き込めなかった月は保存済みとみなさず、消せなかったキーは残っているとみなす
-			for (const key of Object.keys(items)) savedJsonRef.current.delete(key);
-			for (const key of removeKeys) {
-				if (!savedJsonRef.current.has(key)) savedJsonRef.current.set(key, '');
-			}
+			// 次の保存でやり直すよう、保存済みの内容を書き込む前に戻す
+			savedJsonRef.current = previousSavedJson;
 		});
 	}, []);
 	useEffect(() => {
 		chrome.storage.local.get(null, items => {
-			const {records, savedJson, needsMigration} = loadRecords(items, TimeRecord.load);
+			const {records, savedJson} = loadRecords(items, TimeRecord.load);
 			savedJsonRef.current = savedJson;
 			setList(records);
-			// 以前の形式 (1つのキーに全件) なら、月ごとのキーに移す
-			if (needsMigration) write(records);
+			// 以前の形式 (1つのキーに全件) なら、月ごとのキーに移す（移すものがなければ何も書き込まない）
+			write(records);
 		});
 	}, [write]);
 	const add = useCallback(value => {

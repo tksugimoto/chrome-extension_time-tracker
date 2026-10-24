@@ -1,16 +1,15 @@
 // 記録を開始月ごとのキー (record.YYYY-MM) に分けて保存する。chrome API に依存しない処理だけを置く（Node のテストからも読み込む）
 // 1つのキーに全件を保存すると、1文字入力するたびに全件を書き直すことになるため、変わった月だけ書き込む
+import {Formats} from './utils.js';
 
 /** 月ごとに分ける前に、全件を1つの配列で保存していたキー */
-export const LEGACY_RECORD_KEY = 'record';
-export const RECORD_KEY_PREFIX = 'record.';
+const LEGACY_RECORD_KEY = 'record';
+const RECORD_KEY_PREFIX = 'record.';
 
 /**
  * @param {string} key
  */
 export const isRecordKey = key => key === LEGACY_RECORD_KEY || key.startsWith(RECORD_KEY_PREFIX);
-
-const pad = n => String(n).padStart(2, '0');
 
 /**
  * 記録を保存するキー（開始日のローカル時刻の年月）
@@ -18,7 +17,7 @@ const pad = n => String(n).padStart(2, '0');
  */
 export const recordKeyOf = start => {
 	const date = new Date(start);
-	return `${RECORD_KEY_PREFIX}${date.getFullYear()}-${pad(date.getMonth() + 1)}`;
+	return `${RECORD_KEY_PREFIX}${date.getFullYear()}-${Formats.padStart0(date.getMonth() + 1)}`;
 };
 
 /**
@@ -27,16 +26,7 @@ export const recordKeyOf = start => {
  * @param {T[]} records
  * @returns {Map<string, T[]>}
  */
-export const groupRecordsByKey = records => {
-	const grouped = new Map();
-	for (const record of records) {
-		const key = recordKeyOf(record.start);
-		const list = grouped.get(key);
-		if (list) list.push(record);
-		else grouped.set(key, [record]);
-	}
-	return grouped;
-};
+export const groupRecordsByKey = records => Map.groupBy(records, ({start}) => recordKeyOf(start));
 
 /**
  * storage の内容から記録を取り出す
@@ -47,7 +37,6 @@ export const groupRecordsByKey = records => {
  * @returns {{
  * 	records: T[];
  * 	savedJson: Map<string, string>;
- * 	needsMigration: boolean;
  * }} savedJson は planRecordSave に渡す、保存済みの内容
  */
 export const loadRecords = (items, transform = record => record) => {
@@ -58,7 +47,6 @@ export const loadRecords = (items, transform = record => record) => {
 		records: [...lists.values()].flat(),
 		// 変換するとプロパティの順番が変わることがあるため、変換した後の JSON で比べる（使わない以前のキーは消すためだけに持つ）
 		savedJson: new Map(keys.map(key => [key, lists.has(key) ? JSON.stringify(lists.get(key)) : ''])),
-		needsMigration: keys.includes(LEGACY_RECORD_KEY),
 	};
 };
 
@@ -85,15 +73,4 @@ export const planRecordSave = (records, savedJson) => {
 	}
 	const removeKeys = [...savedJson.keys()].filter(key => !nextSavedJson.has(key));
 	return {items, removeKeys, savedJson: nextSavedJson};
-};
-
-/**
- * 以前のキー (record) の記録を月ごとのキーに分けた storage の内容を返す（以前の形式のバックアップの復元用）
- * @param {Object<string, any>} items
- */
-export const splitLegacyRecords = items => {
-	if (!Object.hasOwn(items, LEGACY_RECORD_KEY)) return items;
-	const others = Object.entries(items).filter(([key]) => !isRecordKey(key));
-	// 月ごとのキーもあれば、loadRecords と同じく以前のキーは使わない
-	return Object.fromEntries([...others, ...groupRecordsByKey(loadRecords(items).records)]);
 };

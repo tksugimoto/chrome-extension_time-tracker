@@ -6,7 +6,6 @@ import {
 	groupRecordsByKey,
 	loadRecords,
 	planRecordSave,
-	splitLegacyRecords,
 } from '../chrome-extension/record-storage.js';
 
 // 月の境目はローカル時刻で決まるため、ローカル時刻で作る
@@ -48,23 +47,21 @@ describe('loadRecords', () => {
 
 	it('月ごとのキーを月の順につなげる', () => {
 		const items = {'record.2026-10': [oct], todo: [], 'record.2026-09': [sep]};
-		const {records, savedJson, needsMigration} = loadRecords(items);
+		const {records, savedJson} = loadRecords(items);
 		assert.deepEqual(records, [sep, oct]);
 		assert.deepEqual([...savedJson.keys()].sort(), ['record.2026-09', 'record.2026-10']);
-		assert.equal(needsMigration, false);
+		assert.deepEqual(planRecordSave(records, savedJson), {items: {}, removeKeys: [], savedJson}, '移行するものはない');
 	});
 
-	it('以前のキーだけなら、それを使って移行が要るとする', () => {
-		const {records, needsMigration} = loadRecords({record: [sep, oct]});
+	it('以前のキーだけなら、それを使う', () => {
+		const {records} = loadRecords({record: [sep, oct]});
 		assert.deepEqual(records, [sep, oct]);
-		assert.equal(needsMigration, true);
 	});
 
 	it('月ごとのキーがあれば、消し損ねた以前のキーは使わない（重複させない）', () => {
-		const {records, savedJson, needsMigration} = loadRecords({record: [sep, oct], 'record.2026-09': [sep], 'record.2026-10': [oct]});
+		const {records, savedJson} = loadRecords({record: [sep, oct], 'record.2026-09': [sep], 'record.2026-10': [oct]});
 		assert.deepEqual(records, [sep, oct]);
-		assert.equal(savedJson.has('record'), true);
-		assert.equal(needsMigration, true);
+		assert.deepEqual(planRecordSave(records, savedJson).removeKeys, ['record'], '以前のキーは消す');
 	});
 
 	it('変換した後の JSON を保存済みの内容とする（プロパティの順番が変わっても書き直さない）', () => {
@@ -123,30 +120,5 @@ describe('planRecordSave', () => {
 		const {items, removeKeys} = planRecordSave(records, savedJson);
 		assert.deepEqual(items, {'record.2026-09': [sep], 'record.2026-10': [oct]});
 		assert.deepEqual(removeKeys, ['record']);
-	});
-});
-
-describe('splitLegacyRecords', () => {
-	const sep = r(at(2026, 9, 30), 'sep');
-	const oct = r(at(2026, 10, 1), 'oct');
-
-	it('以前のキーの記録を月ごとのキーに分け、他のキーは残す', () => {
-		assert.deepEqual(splitLegacyRecords({record: [sep, oct], todo: []}), {
-			todo: [],
-			'record.2026-09': [sep],
-			'record.2026-10': [oct],
-		});
-	});
-
-	it('月ごとのキーもあれば、以前のキーは捨てる（上書きして記録を失わない）', () => {
-		const newer = r(at(2026, 10, 2), 'newer');
-		assert.deepEqual(splitLegacyRecords({record: [oct], 'record.2026-10': [oct, newer]}), {
-			'record.2026-10': [oct, newer],
-		});
-	});
-
-	it('以前のキーがなければそのまま返す', () => {
-		const items = {'record.2026-10': [oct]};
-		assert.equal(splitLegacyRecords(items), items);
 	});
 });
