@@ -9,6 +9,7 @@ import {
 	addRecordsToTodoWorkTimes,
 	calculateRemainingTime,
 	escapeCharacterClassMetaChar,
+	createDebouncedWriter,
 } from '../chrome-extension/utils.js';
 
 // 実行環境のタイムゾーンに依存しないよう、日時はローカル時刻で組み立てる
@@ -153,5 +154,48 @@ describe('escapeCharacterClassMetaChar', () => {
 			assert.equal(regExp.test(char), false, char);
 		}
 		assert.equal(regExp.test('b'), true);
+	});
+});
+
+describe('createDebouncedWriter', () => {
+	afterEach(() => mock.timers.reset());
+	const setup = () => {
+		mock.timers.enable({apis: ['setTimeout']});
+		const written = [];
+		const writer = createDebouncedWriter(value => written.push(value), 1000);
+		return {written, writer};
+	};
+
+	it('続けて呼ぶと、最後の呼び出しから delayMs 後に最後の値を1回だけ書き込む', () => {
+		const {written, writer} = setup();
+		writer.writeSoon('a');
+		mock.timers.tick(999);
+		writer.writeSoon('ab');
+		mock.timers.tick(999);
+		assert.deepEqual(written, []);
+		mock.timers.tick(1);
+		assert.deepEqual(written, ['ab']);
+		mock.timers.tick(5000);
+		assert.deepEqual(written, ['ab']);
+	});
+
+	it('flush で待っている書き込みをすぐ行い、待っていなければ何もしない', () => {
+		const {written, writer} = setup();
+		writer.flush();
+		writer.writeSoon('a');
+		writer.flush();
+		assert.deepEqual(written, ['a']);
+		mock.timers.tick(1000);
+		writer.flush();
+		assert.deepEqual(written, ['a']);
+	});
+
+	it('writeNow は待っている書き込みを捨ててすぐ書き込む', () => {
+		const {written, writer} = setup();
+		writer.writeSoon('a');
+		writer.writeNow('b');
+		assert.deepEqual(written, ['b']);
+		mock.timers.tick(1000);
+		assert.deepEqual(written, ['b']);
 	});
 });

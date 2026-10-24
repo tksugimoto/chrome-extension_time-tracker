@@ -251,3 +251,44 @@ export const escapeCharacterClassMetaChar = char => {
 	if (recExpCharacterClassMetaChars.includes(char)) return `\\${char}`;
 	return char;
 };
+
+/**
+ * 続けて変わる値の書き込みを、変わらなくなってから delayMs 後の1回にまとめる
+ * @template T
+ * @param {function(T): void} write
+ * @param {number} delayMs
+ * writeSoon は最後の呼び出しから delayMs 後に書き込む。writeNow は待っている書き込みを捨ててすぐ書き込む。
+ * flush は待っている書き込みがあればすぐ書き込む。
+ * @returns {{
+ * 	writeSoon: function(T): void
+ * 	writeNow: function(T): void
+ * 	flush: function(): void
+ * }}
+ */
+export const createDebouncedWriter = (write, delayMs) => {
+	/** @type {ReturnType<typeof setTimeout> | undefined} */
+	let timer;
+	/** @type {T} */
+	let pendingValue;
+	const cancel = () => {
+		clearTimeout(timer);
+		timer = undefined;
+	};
+	const flush = () => {
+		if (timer === undefined) return;
+		cancel();
+		write(pendingValue);
+	};
+	return {
+		writeSoon: value => {
+			cancel();
+			pendingValue = value;
+			timer = setTimeout(flush, delayMs);
+		},
+		writeNow: value => {
+			cancel();
+			write(value);
+		},
+		flush,
+	};
+};
