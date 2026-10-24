@@ -156,24 +156,26 @@ const useList = (load, write) => {
 		const empty = [];
 		return empty;
 	});
+	// 描画を待たずに最新の一覧を書き込めるよう持っておく
+	// (setList の更新関数の中で書き込むと、描画していない更新があるときは次の描画まで書き込みが遅れ、閉じたときに失われる)
+	const latestListRef = useRef(allList);
+	const update = useCallback(list => {
+		latestListRef.current = list;
+		setList(list);
+	}, []);
 	useEffect(() => {
-		load(setList);
-	}, [load]);
+		load(update);
+	}, [load, update]);
 	const add = useCallback(value => {
-		setList(list => {
-			// TODO: setStateのcallbackの中で副作用ありで良いのか確認
-			const newList = [...list, value];
-			write(newList);
-			return newList;
-		});
-	}, [write]);
+		const newList = [...latestListRef.current, value];
+		write(newList);
+		update(newList);
+	}, [write, update]);
 	const save = useCallback(() => {
-		// 最新の一覧を書き込む（allList はこの関数を作ったときの一覧で、古いことがある）
-		setList(list => {
-			write(list);
-			return [...list];
-		});
-	}, [write]);
+		write(latestListRef.current);
+		// 記録は書き換えられる (mutable) ため、作り直して描画し直す
+		update([...latestListRef.current]);
+	}, [write, update]);
 	return {
 		allList,
 		add,
