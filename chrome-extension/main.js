@@ -997,9 +997,11 @@ const App = () => {
 		// FIXME: mutableをやめる
 		currentRecord?.finish();
 		const record = new TimeRecord(args);
-		// 削除した ToDo の記録を再開したときは、一致する ToDo があればそちらに集計する
-		const todo = record.todo?.deleted && findTodo(record);
-		if (todo) record.linkTodo(todo);
+		// ToDo を参照していない記録や、削除した ToDo の記録を再開したときは、一致する ToDo があればそれを参照する
+		if (!record.todo || record.todo.deleted) {
+			const todo = findTodo(record);
+			if (todo) record.linkTodo(todo);
+		}
 		add(record);
 	};
 
@@ -1298,12 +1300,16 @@ const App = () => {
 							alert(`ToDo「${newTodoType}(${newTodoTitle || '-'})」は既に存在します`);
 							return;
 						}
-						addTodo({
+						const todo = {
 							id: nextTodoId(allTodos),
 							type: newTodoType,
 							title: newTodoTitle,
 							memo: newTodoMemo,
-						});
+						};
+						addTodo(todo);
+						// 分類・タイトルが一致する既存の記録も、ページを開き直さずにこの ToDo を参照させる
+						linkRecordsToTodos(allList, [todo]);
+						save();
 						setNewTodoTitle('');
 						setNewTodoMemo('');
 					},
