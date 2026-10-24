@@ -11,7 +11,7 @@ import {
 	escapeCharacterClassMetaChar,
 	createDebouncedWriter,
 } from './utils.js';
-import {loadRecords, planRecordSave} from './record-storage.js';
+import {loadRecords, markUnsaved, planRecordSave} from './record-storage.js';
 
 /** @typedef {import('./utils.js').Todo} Todo */
 
@@ -200,28 +200,29 @@ const useRecordList = () => {
 		const empty = [];
 		return empty;
 	});
-	/** 月ごとのキーに前回保存した JSON（保存のたびに作り直す） */
-	const savedJsonRef = useRef(new Map());
+	/**
+	 * 月ごとのキーに前回保存した JSON（保存のたびに作り直す）
+	 * 読み込むまでは null（storage の内容が分からないうちに書き込むと、その月の他の記録を消してしまう）
+	 * @type {React.MutableRefObject<Map<string, string> | null>}
+	 */
+	const savedJsonRef = useRef(null);
 	const write = useCallback(list => {
+		if (!savedJsonRef.current) return;
 		const {items, removeKeys, savedJson} = planRecordSave(list, savedJsonRef.current);
 		if (Object.keys(items).length === 0 && removeKeys.length === 0) return;
 		savedJsonRef.current = savedJson;
 		writeToStorage(items, removeKeys).catch(() => {
-			// 次の保存でやり直すよう、書き込めなかった月は保存済みとみなさず、消せなかったキーは残っているとみなす
-			for (const key of Object.keys(items)) savedJsonRef.current.delete(key);
-			for (const key of removeKeys) {
-				if (!savedJsonRef.current.has(key)) savedJsonRef.current.set(key, '');
-			}
+			// 次の保存でやり直すよう、書き込めなかった月とキーを保存されていないとみなす（後の保存が先に終わっていても、その分は消さない）
+			markUnsaved(savedJsonRef.current, {items, removeKeys});
 		});
 	}, []);
 	useEffect(() => {
 		chrome.storage.local.get(null, items => {
-			const {records, savedJson, needsMigration} = loadRecords(items);
+			const {records, savedJson} = loadRecords(items, TimeRecord.load);
 			savedJsonRef.current = savedJson;
-			const list = records.map(TimeRecord.load);
-			setList(list);
-			// 以前の形式 (1つのキーに全件) なら、月ごとのキーに移す
-			if (needsMigration) write(list);
+			setList(records);
+			// 以前の形式 (1つのキーに全件) なら、月ごとのキーに移す（移すものがなければ何も書き込まない）
+			write(records);
 		});
 	}, [write]);
 	const add = useCallback(value => {

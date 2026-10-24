@@ -11,7 +11,6 @@ import {
 	keysToRemove,
 	restoreBackup,
 } from '../chrome-extension/backup.js';
-import {splitLegacyRecords} from '../chrome-extension/record-storage.js';
 
 const sampleData = () => ({
 	record: [
@@ -260,11 +259,17 @@ describe('restoreBackup', () => {
 		assert.deepEqual(storage.calls, [
 			['get', null],
 			['saveCurrentData'],
-			['set', Object.keys(splitLegacyRecords(data))],
-			['remove', ['record', 'setting.only-current']],
+			['set', Object.keys(data)],
+			['remove', ['setting.only-current']],
 		]);
 		assert.deepEqual(saved, [current()]);
-		assert.deepEqual(storage.items, splitLegacyRecords(data));
+		assert.deepEqual(storage.items, data);
+	});
+
+	it('以前の形式 (version 1) の記録で復元すると、今の月ごとのキーは消す', async () => {
+		const storage = createFakeStorage({'record.2026-10': [{start: 1, type: '旧'}]});
+		await restoreBackup(sampleData(), {storage, saveCurrentData: () => {}});
+		assert.deepEqual(storage.items, sampleData());
 	});
 
 	it('書き込みに失敗したら、キーを消さずに reject する', async () => {
@@ -277,7 +282,7 @@ describe('restoreBackup', () => {
 	it('キーの削除に失敗したら reject する（バックアップの内容は書き込み済み）', async () => {
 		const storage = createFakeStorage(current(), {failRemove: true});
 		await assert.rejects(restoreBackup(sampleData(), {storage, saveCurrentData: () => {}}), /remove failed/);
-		assert.deepEqual(storage.items, {...current(), ...splitLegacyRecords(sampleData())});
+		assert.deepEqual(storage.items, {...sampleData(), 'setting.only-current': true});
 	});
 
 	it('現在のデータの保存に失敗したら、書き換えない', async () => {

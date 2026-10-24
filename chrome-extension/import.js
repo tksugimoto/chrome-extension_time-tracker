@@ -61,12 +61,12 @@ fileInput.addEventListener('change', () => {
 	Promise.all([
 		file.text(),
 		chrome.storage.local.get(null),
-	]).then(([text, currentLists]) => {
+	]).then(([text, currentItems]) => {
 		if (selectionId !== fileSelectionId) return;
 		const backup = parseBackup(text);
 		selectedBackup = backup;
 		showStatus(`${formatExportedAt(backup.exportedAt)}のバックアップです（拡張機能 v${backup.extensionVersion ?? '不明'}）。`);
-		renderCounts(summarize(currentLists), summarize(backup.data));
+		renderCounts(summarize(currentItems), summarize(backup.data));
 		restoreButton.disabled = false;
 		preview.hidden = false;
 	}).catch(error => {
