@@ -251,7 +251,7 @@ const inputCommitDelayMs = 1000;
  * 文字入力のたびに全件を保存・再描画しないよう、入力中の文字はこの入力欄の中だけで持つ input
  * onCommit は入力が止まったとき・入力欄から離れたとき・ページが隠れたとき (閉じるときも先に hidden になる) に呼ぶ
  * @param {{
- * 	value: string;
+ * 	value: string | undefined;
  * 	onCommit: function(string): void;
  * 	inputRef?: any; // TODO: type定義
  * } & Object<string, any>} param0 そのほかは input にそのまま渡す
@@ -262,33 +262,38 @@ const LazyInput = ({
 	inputRef,
 	...props
 }) => {
-	const [text, setText] = useState(value);
+	const [text, setText] = useState(value ?? '');
 	// 反映した値や、ほかから変わった値を表示する
-	useEffect(() => setText(value), [value]);
-	const onCommitRef = useRef(onCommit);
-	onCommitRef.current = onCommit;
-	const writer = useMemo(() => createDebouncedWriter(newText => {
-		if (!isDiscardingPendingInputs) onCommitRef.current(newText);
-	}, inputCommitDelayMs), []);
-	useEffect(() => {
+	useEffect(() => setText(value ?? ''), [value]);
+	const handlers = useMemo(() => {
+		// 反映先は入力したときの onCommit にする (待っているあいだに表示する記録が替わっても、元の記録に反映する)
+		const writer = createDebouncedWriter(pending => {
+			if (!isDiscardingPendingInputs) pending.onCommit(pending.text);
+		}, inputCommitDelayMs);
 		const onVisibilityChange = () => {
 			if (document.visibilityState === 'hidden') writer.flush();
 		};
-		document.addEventListener('visibilitychange', onVisibilityChange);
-		return () => {
-			document.removeEventListener('visibilitychange', onVisibilityChange);
-			writer.flush();
+		return {
+			writeSoon: writer.writeSoon,
+			// 入力途中の文字を持つのはフォーカス中の入力欄だけなので、そのあいだだけ見張る
+			onFocus: () => document.addEventListener('visibilitychange', onVisibilityChange),
+			onBlur: () => {
+				document.removeEventListener('visibilitychange', onVisibilityChange);
+				writer.flush();
+			},
 		};
-	}, [writer]);
+	}, []);
+	useEffect(() => handlers.onBlur, [handlers]);
 	return createElement('input', {
 		...props,
 		ref: inputRef,
 		value: text,
 		onChange: e => {
 			setText(e.target.value);
-			writer.writeSoon(e.target.value);
+			handlers.writeSoon({text: e.target.value, onCommit});
 		},
-		onBlur: writer.flush,
+		onFocus: handlers.onFocus,
+		onBlur: handlers.onBlur,
 	});
 };
 

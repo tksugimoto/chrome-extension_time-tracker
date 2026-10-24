@@ -189,13 +189,4 @@ describe('createDebouncedWriter', () => {
 		writer.flush();
 		assert.deepEqual(written, ['a']);
 	});
-
-	it('writeNow は待っている書き込みを捨ててすぐ書き込む', () => {
-		const {written, writer} = setup();
-		writer.writeSoon('a');
-		writer.writeNow('b');
-		assert.deepEqual(written, ['b']);
-		mock.timers.tick(1000);
-		assert.deepEqual(written, ['b']);
-	});
 });

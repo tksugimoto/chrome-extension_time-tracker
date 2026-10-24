@@ -254,14 +254,13 @@ export const escapeCharacterClassMetaChar = char => {
 
 /**
  * 続けて変わる値の書き込みを、変わらなくなってから delayMs 後の1回にまとめる
- * writeSoon は最後の呼び出しから delayMs 後に書き込む。writeNow は待っている書き込みを捨ててすぐ書き込む。
+ * writeSoon は最後の呼び出しから delayMs 後に書き込む。
  * flush は待っている書き込みがあればすぐ書き込む。
  * @template T
  * @param {function(T): void} write
  * @param {number} delayMs
  * @returns {{
  * 	writeSoon: function(T): void
- * 	writeNow: function(T): void
  * 	flush: function(): void
  * }}
  */
@@ -286,10 +285,6 @@ export const createDebouncedWriter = (write, delayMs) => {
 			cancel();
 			pendingValue = value;
 			timer = setTimeout(flush, delayMs);
-		},
-		writeNow: value => {
-			cancel();
-			write(value);
 		},
 		flush,
 	};
