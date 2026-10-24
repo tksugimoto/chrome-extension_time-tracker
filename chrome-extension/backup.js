@@ -1,5 +1,5 @@
 // バックアップファイルの作成と読み込み。chrome API に依存しない処理だけを置く（Node のテストからも読み込む）
-import {isRecordKey, loadRecords, splitLegacyRecords} from './record-storage.js';
+import {isRecordKey, loadRecords} from './record-storage.js';
 import {isActiveTodo, parseRecordData} from './utils.js';
 
 export const BACKUP_FORMAT = 'time-tracker-backup';
@@ -201,15 +201,14 @@ export const keysToRemove = (currentKeys, data) => {
 
 /**
  * バックアップの内容で storage を置き換える
- * @param {Object<string, any>} backupData バックアップの data
+ * 以前の形式 (version 1) の記録 (record) はそのまま書き込み、main.js が開いたときに月ごとのキーへ移す
+ * @param {Object<string, any>} data バックアップの data
  * @param {Object} param1
  * @param {Pick<chrome.storage.StorageArea, 'get' | 'set' | 'remove'>} param1.storage
  * @param {function(Object<string, any>): void} param1.saveCurrentData 書き換える前の全データを受け取り、念のため保存する
  * @returns {Promise<void>}
  */
-export const restoreBackup = (backupData, {storage, saveCurrentData}) => {
-	// 以前の形式 (version 1) のバックアップも、今の形式で書き込む
-	const data = splitLegacyRecords(backupData);
+export const restoreBackup = (data, {storage, saveCurrentData}) => {
 	return storage.get(null).then(currentItems => {
 		saveCurrentData(currentItems);
 		// 先に書き込んでから不要なキーを消す（clear してから書き込むと、書き込みに失敗したときに全データを失う）

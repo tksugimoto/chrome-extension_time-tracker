@@ -14,7 +14,7 @@ import {
 	calculateRemainingTime,
 	escapeCharacterClassMetaChar,
 } from './utils.js';
-import {loadRecords, planRecordSave} from './record-storage.js';
+import {loadRecords, markUnsaved, planRecordSave} from './record-storage.js';
 
 /** @typedef {import('./utils.js').Todo} Todo */
 
@@ -209,20 +209,22 @@ const useRecordList = (todos, isTodosLoaded) => {
 		const empty = [];
 		return empty;
 	});
-	/** 月ごとのキーに前回保存した JSON（保存のたびに作り直す） */
-	const savedJsonRef = useRef(new Map());
+	/**
+	 * 月ごとのキーに前回保存した JSON（保存のたびに作り直す）
+	 * 読み込むまでは null（storage の内容が分からないうちに書き込むと、その月の他の記録を消してしまう）
+	 * @type {React.MutableRefObject<Map<string, string> | null>}
+	 */
+	const savedJsonRef = useRef(null);
 	const write = useCallback(list => {
+		if (!savedJsonRef.current) return;
 		const {items, removeKeys, savedJson} = planRecordSave(list, savedJsonRef.current);
 		if (Object.keys(items).length === 0 && removeKeys.length === 0) return;
 		savedJsonRef.current = savedJson;
 		// storage は toJSON を使わずに保存するため、保存する形式（配列）にしてから渡す
 		const savedItems = Object.fromEntries(Object.entries(items).map(([key, records]) => [key, records.map(record => record.toJSON())]));
 		writeToStorage(savedItems, removeKeys).catch(() => {
-			// 次の保存でやり直すよう、書き込めなかった月は保存済みとみなさず、消せなかったキーは残っているとみなす
-			for (const key of Object.keys(items)) savedJsonRef.current.delete(key);
-			for (const key of removeKeys) {
-				if (!savedJsonRef.current.has(key)) savedJsonRef.current.set(key, '');
-			}
+			// 次の保存でやり直すよう、書き込めなかった月とキーを保存されていないとみなす（後の保存が先に終わっていても、その分は消さない）
+			markUnsaved(savedJsonRef.current, {items, removeKeys});
 		});
 	}, []);
 	const isLoadStartedRef = useRef(false);
@@ -231,14 +233,17 @@ const useRecordList = (todos, isTodosLoaded) => {
 		if (!isTodosLoaded || isLoadStartedRef.current) return;
 		isLoadStartedRef.current = true;
 		chrome.storage.local.get(null, items => {
-			const {records, savedJson} = loadRecords(items);
-			savedJsonRef.current = savedJson;
 			const todoById = new Map(todos.map(todo => [todo.id, todo]));
-			const list = records.map(record => TimeRecord.load(record, todoById));
-			linkRecordsToTodos(list, todos.filter(isActiveTodo));
-			setList(list);
-			// 以前の形式 (1つのキーに全件・項目名のあるオブジェクト・ToDo を参照しない) から変わった月を保存し直す
-			write(list);
+			const {records, savedJson} = loadRecords(items, record => TimeRecord.load(record, todoById));
+			// 項目名のあるオブジェクト（以前の形式）で保存している月は、読み込んだ後の JSON が同じでも配列で保存し直す
+			for (const key of savedJson.keys()) {
+				if (items[key].some(record => !Array.isArray(record))) savedJson.set(key, '');
+			}
+			savedJsonRef.current = savedJson;
+			linkRecordsToTodos(records, todos.filter(isActiveTodo));
+			setList(records);
+			// 以前の形式 (1つのキーに全件・項目名のあるオブジェクト・ToDo を参照しない) から変わった月を保存し直す（なければ何も書き込まない）
+			write(records);
 		});
 	}, [todos, isTodosLoaded, write]);
 	const add = useCallback(value => {
