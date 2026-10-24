@@ -202,8 +202,11 @@ const useRecordList = () => {
 		if (Object.keys(items).length === 0 && removeKeys.length === 0) return;
 		savedJsonRef.current = savedJson;
 		writeToStorage(items, removeKeys).catch(() => {
-			// 次の保存で書き直すよう、書き込めなかった月は保存済みとみなさない
+			// 次の保存でやり直すよう、書き込めなかった月は保存済みとみなさず、消せなかったキーは残っているとみなす
 			for (const key of Object.keys(items)) savedJsonRef.current.delete(key);
+			for (const key of removeKeys) {
+				if (!savedJsonRef.current.has(key)) savedJsonRef.current.set(key, '');
+			}
 		});
 	}, []);
 	useEffect(() => {

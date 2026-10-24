@@ -107,6 +107,16 @@ describe('parseBackup', () => {
 		assert.deepEqual(parseBackup(toText(backup)), backup);
 	});
 
+	it('月ごとのキーに分けた記録 (version 2) も読み込める', () => {
+		const backup = validBackup({'record.2026-10': [{start: 1, type: 'a'}]});
+		assert.deepEqual(parseBackup(toText(backup)), backup);
+	});
+
+	it('version 1 のバックアップも読み込める', () => {
+		const backup = {...validBackup(), version: 1};
+		assert.deepEqual(parseBackup(toText(backup)), backup);
+	});
+
 	it('未知のキーもそのまま残す', () => {
 		const backup = validBackup({'future-key': {a: 1}});
 		assert.deepEqual(parseBackup(toText(backup)).data, {'future-key': {a: 1}});
@@ -149,6 +159,8 @@ describe('parseBackup', () => {
 		['ToDo の group が数値', toText(validBackup({todo: [{type: 'a', title: 'b', group: 1}]})), /ToDo \(todo\) の 1 件目.*グループ \(group\)/],
 		['ToDo の deadline が文字列', toText(validBackup({todo: [{type: 'a', title: 'b', deadline: '2026-10-23'}]})), /ToDo \(todo\) の 1 件目.*期限 \(deadline\)/],
 		['ToDo の estimation が真偽値', toText(validBackup({todo: [{type: 'a', title: 'b', estimation: true}]})), /ToDo \(todo\) の 1 件目.*見積もり \(estimation\)/],
+		['月ごとのキーの記録が配列でない', toText(validBackup({'record.2026-10': {}})), /記録 \(record\.2026-10\) が配列ではありません/],
+		['月ごとのキーの記録が不正', toText(validBackup({'record.2026-10': [{start: 1}]})), /記録 \(record\.2026-10\) の 1 件目.*分類/],
 		['ToDo グループがオブジェクト', toText(validBackup({'todo-group': [{name: 'x'}]})), /ToDo グループ \(todo-group\) の 1 件目が不正です: 文字列ではありません/],
 	];
 	for (const [name, text, message] of invalidCases) {
@@ -165,6 +177,11 @@ describe('parseBackup', () => {
 describe('summarize', () => {
 	it('各一覧の件数を数える', () => {
 		assert.deepEqual(summarize(sampleData()), {record: '2 件', todo: '1 件', type: '2 件', 'todo-group': '1 件'});
+	});
+
+	it('記録は月ごとのキーの合計（消し損ねた以前のキーは数えない）', () => {
+		const data = {record: [{start: 1, type: 'a'}], 'record.2026-09': [{start: 1, type: 'a'}], 'record.2026-10': [{start: 2, type: 'a'}, {start: 3, type: 'a'}]};
+		assert.equal(summarize(data).record, '3 件');
 	});
 
 	it('保存されていない一覧は、既定値を使うものは「初期値」、それ以外は 0 件', () => {
@@ -244,7 +261,7 @@ describe('restoreBackup', () => {
 			['get', null],
 			['saveCurrentData'],
 			['set', Object.keys(splitLegacyRecords(data))],
-			['remove', ['setting.only-current']],
+			['remove', ['record', 'setting.only-current']],
 		]);
 		assert.deepEqual(saved, [current()]);
 		assert.deepEqual(storage.items, splitLegacyRecords(data));
@@ -260,7 +277,7 @@ describe('restoreBackup', () => {
 	it('キーの削除に失敗したら reject する（バックアップの内容は書き込み済み）', async () => {
 		const storage = createFakeStorage(current(), {failRemove: true});
 		await assert.rejects(restoreBackup(sampleData(), {storage, saveCurrentData: () => {}}), /remove failed/);
-		assert.deepEqual(storage.items, {...splitLegacyRecords(sampleData()), 'setting.only-current': true});
+		assert.deepEqual(storage.items, {...current(), ...splitLegacyRecords(sampleData())});
 	});
 
 	it('現在のデータの保存に失敗したら、書き換えない', async () => {

@@ -1,5 +1,5 @@
 // バックアップファイルの作成と読み込み。chrome API に依存しない処理だけを置く（Node のテストからも読み込む）
-import {isRecordKey, splitLegacyRecords} from './record-storage.js';
+import {isRecordKey, loadRecords, splitLegacyRecords} from './record-storage.js';
 
 export const BACKUP_FORMAT = 'time-tracker-backup';
 /** 2: 記録を開始月ごとのキー (record.YYYY-MM) に分けた。1 (record に全件) も読み込める */
@@ -160,15 +160,11 @@ export const parseBackup = text => {
  * @returns {Object<string, string>}
  */
 export const summarize = data => {
-	/** @type {Map<string, number>} 保存されている一覧の件数（記録は月ごとのキーの合計） */
-	const counts = new Map();
-	for (const [key, list] of Object.entries(data)) {
-		const listKey = listKeyOf(key);
-		if (listKey) counts.set(listKey, (counts.get(listKey) ?? 0) + list.length);
-	}
 	return Object.fromEntries(Object.entries(Lists).map(([key, {hasDefault}]) => {
-		if (!counts.has(key)) return [key, hasDefault ? '初期値' : '0 件'];
-		return [key, `${counts.get(key)} 件`];
+		// 記録は月ごとのキーの合計（main.js と同じく読み込む）
+		const list = key === 'record' ? loadRecords(data).records : data[key];
+		if (!list) return [key, hasDefault ? '初期値' : '0 件'];
+		return [key, `${list.length} 件`];
 	}));
 };
 

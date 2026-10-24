@@ -90,6 +90,7 @@ export const planRecordSave = (records, savedJson) => {
  */
 export const splitLegacyRecords = items => {
 	if (!Object.hasOwn(items, LEGACY_RECORD_KEY)) return items;
-	const {[LEGACY_RECORD_KEY]: records, ...rest} = items;
-	return {...rest, ...Object.fromEntries(groupRecordsByKey(records))};
+	const others = Object.entries(items).filter(([key]) => !isRecordKey(key));
+	// 月ごとのキーもあれば、loadRecords と同じく以前のキーは使わない
+	return Object.fromEntries([...others, ...groupRecordsByKey(loadRecords(items).records)]);
 };
