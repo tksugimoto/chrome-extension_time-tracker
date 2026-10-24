@@ -149,7 +149,8 @@ export class TimeRecord {
 	 * @param {Todo} todo
 	 */
 	linkTodo(todo) {
-		this.#memo ??= this.todo?.memo;
+		// 記録で見えていたメモを変えない（メモのない記録に ToDo のメモを表示しない）
+		this.#memo ??= this.todo?.memo ?? (todo.memo ? '' : undefined);
 		this.todo = todo;
 		this.#type = this.#title = undefined;
 		if (this.#memo === todo.memo) this.#memo = undefined;
@@ -328,9 +329,9 @@ export const nextTodoId = todos => todos.reduce((max, {id}) => Math.max(max, id 
  * @returns {Todo[]}
  */
 export const assignTodoIds = todos => {
-	if (todos.every(({id}) => id !== undefined)) return /** @type {Todo[]} */ (todos);
+	if (todos.every(({id}) => id != null)) return /** @type {Todo[]} */ (todos);
 	let id = nextTodoId(todos);
-	return todos.map(todo => todo.id === undefined ? {id: id++, ...todo} : todo);
+	return todos.map(todo => todo.id == null ? {...todo, id: id++} : todo);
 };
 
 /**
@@ -356,6 +357,13 @@ export const createTodoIndex = todos => {
 		 */
 		findByKey: todoOrRecord => todos[indexByKey.get(todoKeyOf(todoOrRecord)) ?? -1],
 		/**
+		 * 記録に参照させる ToDo（分類・タイトルが一致する ToDo）
+		 * タイトルが空の記録は、分類のボタンから開始した記録と区別できないので参照させない（分類・タイトルでの集計は続ける）
+		 * @param {TimeRecord} record
+		 * @returns {Todo | undefined}
+		 */
+		findTodoToLink: record => record.title ? todos[indexByKey.get(todoKeyOf(record)) ?? -1] : undefined,
+		/**
 		 * @param {Todo} todo
 		 */
 		indexOfTodo: todo => indexByTodo.get(todo),
@@ -374,10 +382,10 @@ export const createTodoIndex = todos => {
  * @param {Todo[]} todos 一覧に表示する（削除していない）ToDo
  */
 export const linkRecordsToTodos = (records, todos) => {
-	const {findByKey} = createTodoIndex(todos);
+	const {findTodoToLink} = createTodoIndex(todos);
 	for (const record of records) {
 		if (record.todo) continue;
-		const todo = findByKey(record);
+		const todo = findTodoToLink(record);
 		if (todo) record.linkTodo(todo);
 	}
 };

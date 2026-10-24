@@ -43,7 +43,7 @@ describe('TimeRecord', () => {
 	});
 
 	it('ToDo を参照する記録は、項目名を省いた配列で ID と経過時間を保存する', () => {
-		const record = TimeRecord.load({start: 1000, end: 61000, type: '開発', title: 'レビュー'});
+		const record = TimeRecord.load({start: 1000, end: 61000, type: '開発', title: 'レビュー', memo: todo.memo});
 		record.linkTodo(todo);
 		assert.deepEqual(JSON.parse(JSON.stringify(record)), [1000, 60000, 7]);
 		assert.deepEqual(fieldsOf(TimeRecord.load([1000, 60000, 7], todoById)), {
@@ -90,6 +90,16 @@ describe('TimeRecord', () => {
 		const other = TimeRecord.load({start: 1000, type: '開発', title: 'レビュー', memo: '個別のメモ'});
 		other.linkTodo(todo);
 		assert.deepEqual(JSON.parse(JSON.stringify(other)), [1000, null, 7, '個別のメモ']);
+	});
+
+	it('linkTodo で参照しても、メモのない記録に ToDo のメモを表示しない', () => {
+		const record = TimeRecord.load({start: 1000, type: '開発', title: 'レビュー'});
+		record.linkTodo(todo);
+		assert.equal(record.memo, '');
+		const noMemoTodo = {id: 8, type: '開発', title: '設計'};
+		const other = TimeRecord.load({start: 1000, type: '開発', title: '設計'});
+		other.linkTodo(noMemoTodo);
+		assert.deepEqual(JSON.parse(JSON.stringify(other)), [1000, null, 8]);
 	});
 
 	it('再開した記録は元の記録と同じ ToDo を参照する', () => {
@@ -198,6 +208,10 @@ describe('ToDo の ID', () => {
 		assert.equal(todos[0].id, undefined);
 	});
 
+	it('assignTodoIds は ID が null の ToDo にも ID を振る', () => {
+		assert.deepEqual(assignTodoIds([{id: null, type: 'a', title: ''}]), [{id: 1, type: 'a', title: ''}]);
+	});
+
 	it('assignTodoIds は全件に ID があれば同じ配列を返す', () => {
 		const todos = [{id: 1, type: 'a', title: ''}];
 		assert.equal(assignTodoIds(todos), todos);
@@ -235,6 +249,14 @@ describe('linkRecordsToTodos', () => {
 		];
 		linkRecordsToTodos(records, [todo, {id: 3, type: 'A', title: 't'}, {...other, id: 4}]);
 		assert.deepEqual(records.map(record => record.todo), [todo, undefined, other]);
+	});
+
+	it('タイトルが空の記録は、分類だけの ToDo があっても参照させない（分類のボタンから開始した記録と区別できない）', () => {
+		const typeOnly = {id: 1, type: '中断', title: ''};
+		const record = TimeRecord.load({start: 1, type: '中断'});
+		linkRecordsToTodos([record], [typeOnly]);
+		assert.equal(record.todo, undefined);
+		assert.equal(createTodoIndex([typeOnly]).indexOf(record), 0, '集計は分類・タイトルで続ける');
 	});
 });
 

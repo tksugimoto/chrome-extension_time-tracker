@@ -268,7 +268,7 @@ const titleSize = 40;
  * @param {{name: string}[]} param0.types
  * @param {TimeRecord} param0.record
  * @param {function(): void} param0.save
- * @param {function(TimeRecord): (Todo | undefined)} param0.findTodo 記録の分類・タイトルが一致する ToDo
+ * @param {function(TimeRecord): (Todo | undefined)} param0.findTodo 記録に参照させる ToDo (createTodoIndex の findTodoToLink)
  * @param {function(TimeRecord): void=} param0.editTime
  * @param {function(TimeRecord): void=} param0.finishAndAddRecord
  * @param {boolean=} param0.isEditable
@@ -916,7 +916,7 @@ const App = () => {
 	// 毎秒の再描画で全件を集計し直さないよう、終了済みの記録の集計はメモ化し、計測中の記録だけ毎回加算する
 	// 記録を書き換えたときは save() / add() で allList を作り直すこと（作り直さないとメモ化した集計が古いままになる）
 	const todoIndex = useMemo(() => createTodoIndex(todos), [todos]);
-	const findTodo = todoIndex.findByKey;
+	const findTodo = todoIndex.findTodoToLink;
 	// 作業時間が変わり続けるのは、今日開始した未終了の記録だけ（前日以前の未終了の記録はその日の終わりまでで固定）
 	const today = startOfDate().getTime();
 	const [finishedRecords, runningRecords] = useMemo(() => {
@@ -997,7 +997,11 @@ const App = () => {
 	const finishAndAddRecord = (args) => {
 		// FIXME: mutableをやめる
 		currentRecord?.finish();
-		add(new TimeRecord(args));
+		const record = new TimeRecord(args);
+		// 削除した ToDo の記録を再開したときは、一致する ToDo があればそちらに集計する
+		const todo = record.todo?.deleted && findTodo(record);
+		if (todo) record.linkTodo(todo);
+		add(record);
 	};
 
 	return createElement(
@@ -1175,7 +1179,7 @@ const App = () => {
 									finishAndAddRecord,
 									types,
 									todoWorkTimeTatal,
-									isDuplicate: findTodo(todo) !== todo,
+									isDuplicate: todoIndex.findByKey(todo) !== todo,
 									showSubtotal: () => {
 										setTodoWorkTime(todoWorkTimes[i]);
 										showSubtotalModalDialog();
@@ -1291,7 +1295,7 @@ const App = () => {
 				{
 					onSubmit: e => {
 						e.preventDefault();
-						if (findTodo({type: newTodoType, title: newTodoTitle})) {
+						if (todoIndex.findByKey({type: newTodoType, title: newTodoTitle})) {
 							alert(`ToDo「${newTodoType}(${newTodoTitle || '-'})」は既に存在します`);
 							return;
 						}
