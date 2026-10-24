@@ -6,6 +6,7 @@ import {
 	groupRecordsByKey,
 	loadRecords,
 	planRecordSave,
+	markUnsaved,
 } from '../chrome-extension/record-storage.js';
 
 // 月の境目はローカル時刻で決まるため、ローカル時刻で作る
@@ -71,6 +72,10 @@ describe('loadRecords', () => {
 		assert.deepEqual(planRecordSave(records, savedJson).items, {});
 	});
 
+	it('配列でない record.* のキーは無視する', () => {
+		assert.deepEqual(loadRecords({'record.x': {}, 'record.y': null, 'record.2026-10': [oct]}).records, [oct]);
+	});
+
 	it('記録がなければ空', () => {
 		assert.deepEqual(loadRecords({todo: []}).records, []);
 	});
@@ -120,5 +125,27 @@ describe('planRecordSave', () => {
 		const {items, removeKeys} = planRecordSave(records, savedJson);
 		assert.deepEqual(items, {'record.2026-09': [sep], 'record.2026-10': [oct]});
 		assert.deepEqual(removeKeys, ['record']);
+	});
+});
+
+describe('markUnsaved', () => {
+	it('書き込めなかった月は書き直し、消せなかったキーは消し直す', () => {
+		const sep = r(at(2026, 9, 30), 'sep');
+		const oct = r(at(2026, 10, 1), 'oct');
+		const {records, savedJson} = loadRecords({record: [sep, oct]});
+		const plan = planRecordSave(records, savedJson);
+		markUnsaved(plan.savedJson, plan);
+		const retry = planRecordSave(records, plan.savedJson);
+		assert.deepEqual(retry.items, plan.items);
+		assert.deepEqual(retry.removeKeys, ['record']);
+	});
+
+	it('後の保存で書き込んだ月は、保存済みのまま', () => {
+		const sep = r(at(2026, 9, 30), 'sep');
+		const oct = r(at(2026, 10, 1), 'oct');
+		const first = planRecordSave([sep, oct], new Map());
+		const failed = planRecordSave([sep, {...oct, title: 'changed'}], first.savedJson);
+		markUnsaved(failed.savedJson, failed);
+		assert.deepEqual([...failed.savedJson.keys()], ['record.2026-09']);
 	});
 });

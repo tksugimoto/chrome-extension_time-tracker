@@ -40,7 +40,8 @@ export const groupRecordsByKey = records => Map.groupBy(records, ({start}) => re
  * }} savedJson は planRecordSave に渡す、保存済みの内容
  */
 export const loadRecords = (items, transform = record => record) => {
-	const keys = Object.keys(items).filter(isRecordKey);
+	// 配列でないものは記録ではない（読み込めないので無視する）
+	const keys = Object.keys(items).filter(key => isRecordKey(key) && Array.isArray(items[key]));
 	const monthKeys = keys.filter(key => key !== LEGACY_RECORD_KEY).sort();
 	const lists = new Map((monthKeys.length ? monthKeys : keys).map(key => [key, items[key].map(transform)]));
 	return {
@@ -73,4 +74,17 @@ export const planRecordSave = (records, savedJson) => {
 	}
 	const removeKeys = [...savedJson.keys()].filter(key => !nextSavedJson.has(key));
 	return {items, removeKeys, savedJson: nextSavedJson};
+};
+
+/**
+ * planRecordSave の結果を書き込めなかったとき、次の保存で書き込み直す・消し直すよう savedJson を直す
+ * @param {Map<string, string>} savedJson
+ * @param {{items: Object<string, any>, removeKeys: string[]}} plan
+ */
+export const markUnsaved = (savedJson, {items, removeKeys}) => {
+	for (const key of Object.keys(items)) savedJson.delete(key);
+	// 消せなかったキーは残っているものとする（JSON は比べないので空でよい）
+	for (const key of removeKeys) {
+		if (!savedJson.has(key)) savedJson.set(key, '');
+	}
 };

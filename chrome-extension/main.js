@@ -10,7 +10,7 @@ import {
 	calculateRemainingTime,
 	escapeCharacterClassMetaChar,
 } from './utils.js';
-import {loadRecords, planRecordSave} from './record-storage.js';
+import {loadRecords, markUnsaved, planRecordSave} from './record-storage.js';
 
 /** @typedef {import('./utils.js').Todo} Todo */
 
@@ -195,16 +195,20 @@ const useRecordList = () => {
 		const empty = [];
 		return empty;
 	});
-	/** 月ごとのキーに前回保存した JSON（保存のたびに作り直す） */
-	const savedJsonRef = useRef(new Map());
+	/**
+	 * 月ごとのキーに前回保存した JSON（保存のたびに作り直す）
+	 * 読み込むまでは null（storage の内容が分からないうちに書き込むと、その月の他の記録を消してしまう）
+	 * @type {React.MutableRefObject<Map<string, string> | null>}
+	 */
+	const savedJsonRef = useRef(null);
 	const write = useCallback(list => {
-		const previousSavedJson = savedJsonRef.current;
-		const {items, removeKeys, savedJson} = planRecordSave(list, previousSavedJson);
+		if (!savedJsonRef.current) return;
+		const {items, removeKeys, savedJson} = planRecordSave(list, savedJsonRef.current);
 		if (Object.keys(items).length === 0 && removeKeys.length === 0) return;
 		savedJsonRef.current = savedJson;
 		writeToStorage(items, removeKeys).catch(() => {
-			// 次の保存でやり直すよう、保存済みの内容を書き込む前に戻す
-			savedJsonRef.current = previousSavedJson;
+			// 次の保存でやり直すよう、書き込めなかった月とキーを保存されていないとみなす（後の保存が先に終わっていても、その分は消さない）
+			markUnsaved(savedJsonRef.current, {items, removeKeys});
 		});
 	}, []);
 	useEffect(() => {
