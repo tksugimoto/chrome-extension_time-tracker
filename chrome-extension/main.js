@@ -154,26 +154,27 @@ const useStorageList = (storageKey, {
 		const empty = [];
 		return empty;
 	});
+	// 入力欄 (LazyInput) は後から save するので、描画を待たずに最新の一覧を書き込めるよう持っておく
+	// (setList の更新関数の中で書き込むと、描画していない更新があるときは次の描画まで書き込みが遅れ、閉じたときに失われる)
+	const latestListRef = useRef(allList);
+	const update = useCallback(list => {
+		latestListRef.current = list;
+		setList(list);
+	}, []);
 	useEffect(() => {
 		loadFromStorage(storageKey, list => {
-			setList((list ?? defaultValue ?? []).map(transform ?? (v => v)));
+			update((list ?? defaultValue ?? []).map(transform ?? (v => v)));
 		});
-	}, [storageKey, defaultValue, transform]);
+	}, [storageKey, defaultValue, transform, update]);
 	const add = useCallback(value => {
-		setList(list => {
-			// TODO: setStateのcallbackの中で副作用ありで良いのか確認
-			const newList = [...list, value];
-			saveToStorage(storageKey, newList);
-			return newList;
-		});
-	}, [storageKey]);
-	// 入力欄 (LazyInput) は後から save するので、描画したときの allList ではなく最新の一覧を書き込む
+		const newList = [...latestListRef.current, value];
+		saveToStorage(storageKey, newList);
+		update(newList);
+	}, [storageKey, update]);
 	const save = useCallback(() => {
-		setList(list => {
-			saveToStorage(storageKey, list);
-			return [...list];
-		});
-	}, [storageKey]);
+		saveToStorage(storageKey, latestListRef.current);
+		update([...latestListRef.current]);
+	}, [storageKey, update]);
 	return {
 		allList,
 		add,
