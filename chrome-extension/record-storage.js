@@ -77,6 +77,17 @@ export const planRecordSave = (records, savedJson) => {
 };
 
 /**
+ * storage の内容の記録を、月ごとのキーに分けたものにして返す（記録以外のキーはそのまま）
+ * @param {Object<string, any>} items
+ * @returns {Object<string, any>}
+ */
+export const toMonthKeys = items => {
+	if (!Object.hasOwn(items, LEGACY_RECORD_KEY)) return items;
+	const others = Object.entries(items).filter(([key]) => !isRecordKey(key));
+	return Object.fromEntries([...others, ...groupRecordsByKey(loadRecords(items).records)]);
+};
+
+/**
  * planRecordSave の結果を書き込めなかったとき、次の保存で書き込み直す・消し直すよう savedJson を直す
  * @param {Map<string, string>} savedJson
  * @param {{items: Object<string, any>, removeKeys: string[]}} plan
