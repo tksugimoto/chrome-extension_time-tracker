@@ -159,7 +159,6 @@ const useList = (load, write) => {
 	useEffect(() => {
 		load(setList);
 	}, [load]);
-	const refresh = useCallback(() => setList(list => [...list]), []);
 	const add = useCallback(value => {
 		setList(list => {
 			// TODO: setStateのcallbackの中で副作用ありで良いのか確認
@@ -169,9 +168,12 @@ const useList = (load, write) => {
 		});
 	}, [write]);
 	const save = useCallback(() => {
-		refresh();
-		write(allList);
-	}, [allList, refresh, write]);
+		// 最新の一覧を書き込む（allList はこの関数を作ったときの一覧で、古いことがある）
+		setList(list => {
+			write(list);
+			return [...list];
+		});
+	}, [write]);
 	return {
 		allList,
 		add,
