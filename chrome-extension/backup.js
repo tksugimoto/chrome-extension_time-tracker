@@ -1,7 +1,13 @@
 // バックアップファイルの作成と読み込み。chrome API に依存しない処理だけを置く（Node のテストからも読み込む）
+import {isRecordKey, loadRecords, toMonthKeys} from './record-storage.js';
+import {isActiveTodo, parseRecordData} from './utils.js';
 
 export const BACKUP_FORMAT = 'time-tracker-backup';
-export const BACKUP_VERSION = 1;
+/**
+ * 2: 記録を開始月ごとのキー (record.YYYY-MM) に分けた。1 (record に全件) も読み込める
+ * 3: ToDo に ID を振り、記録は項目名を省いた配列で ToDo を ID で参照する。1・2 も読み込める（記録ページを開いたときに今の形式にする）
+ */
+export const BACKUP_VERSION = 3;
 
 /**
  * インポートするときに、ファイルの種類と形式の版を見分けられるようにメタ情報を付ける
@@ -54,22 +60,28 @@ const isFiniteNumber = value => typeof value === 'number' && Number.isFinite(val
 
 const isString = value => typeof value === 'string';
 
+const isBoolean = value => typeof value === 'boolean';
+
 /** 任意項目: 未設定 (undefined / null) か、条件を満たす */
 const isOptional = (value, isValid) => value == null || isValid(value);
 
 /**
- * 一覧（配列）で保存しているキーと、その要素が読み込めない場合に理由を返す関数
+ * 一覧（配列）で保存しているキー（記録は月ごとのキーに分けて保存している）と、その要素が読み込めない場合に理由を返す関数
  * hasDefault: 保存されていないとき、main.js が既定の一覧を使う
  * @type {Object<string, {label: string, hasDefault?: boolean, findProblem: function(any): (string | undefined)}>}
  */
 export const Lists = {
 	record: {
 		label: '記録',
-		findProblem: record => {
-			if (!isPlainObject(record)) return 'オブジェクトではありません';
+		findProblem: data => {
+			// 配列（今の形式）か、項目名のあるオブジェクト（以前の形式）
+			if (!isPlainObject(data) && !Array.isArray(data)) return 'オブジェクトでも配列でもありません';
+			const record = parseRecordData(data);
 			if (!isFiniteNumber(record.start)) return '開始時刻 (start) が数値ではありません';
-			if (record.end != null && !isFiniteNumber(record.end)) return '終了時刻 (end) が数値ではありません';
-			if (!isString(record.type)) return '分類 (type) が文字列ではありません';
+			if (!isOptional(record.end, isFiniteNumber)) return '終了時刻 (end) が数値ではありません';
+			if (record.todoId !== undefined) {
+				if (!Number.isInteger(record.todoId)) return 'ToDo の ID が整数ではありません';
+			} else if (!isString(record.type)) return '分類 (type) が文字列ではありません';
 			if (!isOptional(record.title, isString)) return 'タイトル (title) が文字列ではありません';
 			if (!isOptional(record.memo, isString)) return 'メモ (memo) が文字列ではありません';
 		},
@@ -78,6 +90,8 @@ export const Lists = {
 		label: 'ToDo',
 		findProblem: todo => {
 			if (!isPlainObject(todo)) return 'オブジェクトではありません';
+			// ID で参照する前 (version 2 以前) の ToDo には ID がない
+			if (!isOptional(todo.id, Number.isInteger)) return 'ID (id) が整数ではありません';
 			if (!isString(todo.type)) return '分類 (type) が文字列ではありません';
 			if (!isString(todo.title)) return 'タイトル (title) が文字列ではありません';
 			if (!isOptional(todo.memo, isString)) return 'メモ (memo) が文字列ではありません';
@@ -85,6 +99,7 @@ export const Lists = {
 			if (!isOptional(todo.deadline, isFiniteNumber)) return '期限 (deadline) が数値ではありません';
 			// 入力欄の値（文字列）のまま保存している
 			if (!isOptional(todo.estimation, v => isString(v) || isFiniteNumber(v))) return '見積もり (estimation) が文字列でも数値でもありません';
+			if (!isOptional(todo.deleted, isBoolean)) return '削除済み (deleted) が真偽値ではありません';
 		},
 	},
 	type: {
@@ -104,7 +119,15 @@ export const Lists = {
 	},
 };
 
-export const LIST_KEYS = Object.keys(Lists);
+/**
+ * storage のキーが一覧なら、Lists のキーを返す
+ * @param {string} key
+ * @returns {string | undefined}
+ */
+const listKeyOf = key => {
+	if (isRecordKey(key)) return 'record';
+	if (Object.hasOwn(Lists, key)) return key;
+};
 
 /**
  * バックアップファイルの中身を検証して返す。読み込めない場合は理由を message に持つ Error を投げる
@@ -131,13 +154,22 @@ export const parseBackup = text => {
 	if (!isPlainObject(data)) {
 		throw new Error('バックアップにデータ (data) がありません。');
 	}
-	for (const [key, {label, findProblem}] of Object.entries(Lists)) {
-		if (!Object.hasOwn(data, key)) continue;
-		if (!Array.isArray(data[key])) throw new Error(`${label} (${key}) が配列ではありません。`);
-		data[key].forEach((item, index) => {
+	for (const [key, list] of Object.entries(data)) {
+		const listKey = listKeyOf(key);
+		if (!listKey) continue;
+		const {label, findProblem} = Lists[listKey];
+		if (!Array.isArray(list)) throw new Error(`${label} (${key}) が配列ではありません。`);
+		list.forEach((item, index) => {
 			const problem = findProblem(item);
-			if (problem) throw new Error(`${label}の ${index + 1} 件目が不正です: ${problem}`);
+			if (problem) throw new Error(`${label} (${key}) の ${index + 1} 件目が不正です: ${problem}`);
 		});
+	}
+	// 参照先の ToDo が見つからない記録は記録ページで「不明なToDo」と表示できるが、ID の重複は別の ToDo に集計されてしまう
+	const todoIds = new Set();
+	for (const {id} of data.todo ?? []) {
+		if (id == null) continue;
+		if (todoIds.has(id)) throw new Error(`ToDo の ID (${id}) が重複しています。`);
+		todoIds.add(id);
 	}
 	return backup;
 };
@@ -149,8 +181,12 @@ export const parseBackup = text => {
  */
 export const summarize = data => {
 	return Object.fromEntries(Object.entries(Lists).map(([key, {hasDefault}]) => {
-		if (!Object.hasOwn(data, key)) return [key, hasDefault ? '初期値' : '0 件'];
-		return [key, `${data[key].length} 件`];
+		// 記録は月ごとのキーの合計（main.js と同じく読み込む）。ToDo は削除済み（一覧に表示しないもの）を数えない
+		const list = key === 'record' ? loadRecords(data).records
+			: key === 'todo' ? data.todo?.filter(isActiveTodo)
+			: data[key];
+		if (!list) return [key, hasDefault ? '初期値' : '0 件'];
+		return [key, `${list.length} 件`];
 	}));
 };
 
@@ -165,13 +201,16 @@ export const keysToRemove = (currentKeys, data) => {
 
 /**
  * バックアップの内容で storage を置き換える
- * @param {Object<string, any>} data バックアップの data
+ * @param {Object<string, any>} backupData バックアップの data
  * @param {Object} param1
  * @param {Pick<chrome.storage.StorageArea, 'get' | 'set' | 'remove'>} param1.storage
  * @param {function(Object<string, any>): void} param1.saveCurrentData 書き換える前の全データを受け取り、念のため保存する
  * @returns {Promise<void>}
  */
-export const restoreBackup = (data, {storage, saveCurrentData}) => {
+export const restoreBackup = (backupData, {storage, saveCurrentData}) => {
+	// 以前の形式 (version 1) の記録も月ごとのキーで書き込む。record のまま書くと、今の月ごとのキーを消せなかったときに
+	// 月ごとのキーが優先され、復元した記録が使われない（以前のキーと月ごとのキーが両方あるのは、移行の消し損ねだけにする）
+	const data = toMonthKeys(backupData);
 	return storage.get(null).then(currentItems => {
 		saveCurrentData(currentItems);
 		// 先に書き込んでから不要なキーを消す（clear してから書き込むと、書き込みに失敗したときに全データを失う）
