@@ -211,12 +211,11 @@ const useRecordList = () => {
 	}, []);
 	useEffect(() => {
 		chrome.storage.local.get(null, items => {
-			const {records, savedJson, needsMigration} = loadRecords(items);
+			const {records, savedJson, needsMigration} = loadRecords(items, TimeRecord.load);
 			savedJsonRef.current = savedJson;
-			const list = records.map(TimeRecord.load);
-			setList(list);
+			setList(records);
 			// 以前の形式 (1つのキーに全件) なら、月ごとのキーに移す
-			if (needsMigration) write(list);
+			if (needsMigration) write(records);
 		});
 	}, [write]);
 	const add = useCallback(value => {

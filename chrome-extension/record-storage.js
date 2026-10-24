@@ -41,20 +41,23 @@ export const groupRecordsByKey = records => {
 /**
  * storage の内容から記録を取り出す
  * 月ごとのキーがあれば、以前のキーは移行の後に消し損ねたものなので使わない（両方使うと記録が重複する）
+ * @template T
  * @param {Object<string, any>} items
+ * @param {function(any): T=} transform 読み込んだ記録を変換する（保存済みの内容は変換した後の JSON で持つ）
  * @returns {{
- * 	records: {start: number}[];
+ * 	records: T[];
  * 	savedJson: Map<string, string>;
  * 	needsMigration: boolean;
  * }} savedJson は planRecordSave に渡す、保存済みの内容
  */
-export const loadRecords = items => {
+export const loadRecords = (items, transform = record => record) => {
 	const keys = Object.keys(items).filter(isRecordKey);
 	const monthKeys = keys.filter(key => key !== LEGACY_RECORD_KEY).sort();
-	const sourceKeys = monthKeys.length ? monthKeys : keys;
+	const lists = new Map((monthKeys.length ? monthKeys : keys).map(key => [key, items[key].map(transform)]));
 	return {
-		records: sourceKeys.flatMap(key => items[key]),
-		savedJson: new Map(keys.map(key => [key, JSON.stringify(items[key])])),
+		records: [...lists.values()].flat(),
+		// 変換するとプロパティの順番が変わることがあるため、変換した後の JSON で比べる（使わない以前のキーは消すためだけに持つ）
+		savedJson: new Map(keys.map(key => [key, lists.has(key) ? JSON.stringify(lists.get(key)) : ''])),
 		needsMigration: keys.includes(LEGACY_RECORD_KEY),
 	};
 };

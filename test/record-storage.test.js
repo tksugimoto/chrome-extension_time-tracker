@@ -67,6 +67,13 @@ describe('loadRecords', () => {
 		assert.equal(needsMigration, true);
 	});
 
+	it('変換した後の JSON を保存済みの内容とする（プロパティの順番が変わっても書き直さない）', () => {
+		const stored = {start: at(2026, 10, 1), end: at(2026, 10, 1, 1), type: '開発'};
+		const transform = ({start, type, end}) => ({start, type, end});
+		const {records, savedJson} = loadRecords({'record.2026-10': [stored]}, transform);
+		assert.deepEqual(planRecordSave(records, savedJson).items, {});
+	});
+
 	it('記録がなければ空', () => {
 		assert.deepEqual(loadRecords({todo: []}).records, []);
 	});
