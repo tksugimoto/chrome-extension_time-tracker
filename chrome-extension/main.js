@@ -593,7 +593,7 @@ const TodoRow = ({
 					const value = e.target.value;
 					const num = Number(value);
 					todo.estimation = Number.isNaN(num) || num < 0 ? undefined : value;
-					saveTodo();
+					saveTodoSoon();
 				},
 			}),
 			isTodoEditMode && '時間',
