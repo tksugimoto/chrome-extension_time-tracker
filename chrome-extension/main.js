@@ -9,6 +9,7 @@ import {
 	addRecordsToTodoWorkTimes,
 	calculateRemainingTime,
 	escapeCharacterClassMetaChar,
+	createDebouncedWriter,
 } from './utils.js';
 
 /** @typedef {import('./utils.js').Todo} Todo */
@@ -76,8 +77,12 @@ const is勤務外 = type => {
 };
 
 // バックアップから復元されたら、古いデータで上書きしないよう読み込み直す (import.js から送られる)
+// 復元したデータを、まだ反映していない入力 (LazyInput) で上書きしないよう捨てる
+let isDiscardingPendingInputs = false;
 chrome.runtime.onMessage.addListener(message => {
-	if (message?.type === 'backup-restored') location.reload();
+	if (message?.type !== 'backup-restored') return;
+	isDiscardingPendingInputs = true;
+	location.reload();
 });
 
 const loadFromStorage = (key, callback) => {
@@ -154,7 +159,6 @@ const useStorageList = (storageKey, {
 			setList((list ?? defaultValue ?? []).map(transform ?? (v => v)));
 		});
 	}, [storageKey, defaultValue, transform]);
-	const refresh = useCallback(() => setList(list => [...list]), []);
 	const add = useCallback(value => {
 		setList(list => {
 			// TODO: setStateのcallbackの中で副作用ありで良いのか確認
@@ -163,15 +167,71 @@ const useStorageList = (storageKey, {
 			return newList;
 		});
 	}, [storageKey]);
+	// 入力欄 (LazyInput) は後から save するので、描画したときの allList ではなく最新の一覧を書き込む
 	const save = useCallback(() => {
-		refresh();
-		saveToStorage(storageKey, allList);
-	}, [allList, refresh, storageKey]);
+		setList(list => {
+			saveToStorage(storageKey, list);
+			return [...list];
+		});
+	}, [storageKey]);
 	return {
 		allList,
 		add,
 		save,
 	};
+};
+
+/** 入力が止まってから反映するまでの時間 */
+const inputCommitDelayMs = 1000;
+
+/**
+ * 文字入力のたびに全件を保存・再描画しないよう、入力中の文字はこの入力欄の中だけで持つ input
+ * onCommit は入力が止まったとき・入力欄から離れたとき・ページが隠れたとき (閉じるときも先に hidden になる) に呼ぶ
+ * @param {{
+ * 	value: string | undefined;
+ * 	onCommit: function(string): void;
+ * 	inputRef?: any; // TODO: type定義
+ * } & Object<string, any>} param0 そのほかは input にそのまま渡す
+ */
+const LazyInput = ({
+	value,
+	onCommit,
+	inputRef,
+	...props
+}) => {
+	const [text, setText] = useState(value ?? '');
+	// 反映した値や、ほかから変わった値を表示する
+	useEffect(() => setText(value ?? ''), [value]);
+	const handlers = useMemo(() => {
+		// 反映先は入力したときの onCommit にする (待っているあいだに表示する記録が替わっても、元の記録に反映する)
+		const writer = createDebouncedWriter(pending => {
+			if (!isDiscardingPendingInputs) pending.onCommit(pending.text);
+		}, inputCommitDelayMs);
+		const onVisibilityChange = () => {
+			if (document.visibilityState === 'hidden') writer.flush();
+		};
+		return {
+			writeSoon: writer.writeSoon,
+			// 入力途中の文字を持つのはフォーカス中の入力欄だけなので、そのあいだだけ見張る
+			onFocus: () => document.addEventListener('visibilitychange', onVisibilityChange),
+			onBlur: () => {
+				document.removeEventListener('visibilitychange', onVisibilityChange);
+				writer.flush();
+			},
+		};
+	}, []);
+	useEffect(() => handlers.onBlur, [handlers]);
+	return createElement('input', {
+		...props,
+		ref: inputRef,
+		value: text,
+		onChange: e => {
+			setText(e.target.value);
+			handlers.writeSoon({text: e.target.value, onCommit});
+		},
+		onFocus: handlers.onFocus,
+		onBlur: handlers.onBlur,
+	});
 };
 
 const titleSize = 40;
@@ -232,27 +292,27 @@ const RecordView = ({
 			}),
 		),
 		createElement(
-			'input',
+			LazyInput,
 			{
-				ref: titleRef,
+				inputRef: titleRef,
 				value: record.title || '',
 				placeholder: 'タイトル',
 				size: titleSize,
-				onChange: e => {
+				onCommit: title => {
 					// FIXME: mutableをやめる
-					record.setTitle(e.target.value);
+					record.setTitle(title);
 					save();
 				},
 			},
 		),
 		createElement(
-			'input',
+			LazyInput,
 			{
 				value: record.memo || '',
 				placeholder: 'メモ',
-				onChange: e => {
+				onCommit: memo => {
 					// FIXME: mutableをやめる
-					record.setMemo(e.target.value);
+					record.setMemo(memo);
 					save();
 				},
 			},
@@ -470,14 +530,13 @@ const TodoRow = ({
 		}, Formats.seconds(todoWorkTimeTatal)),
 		usingTodoEstimation && createElement(React.Fragment, {},
 			' / ',
-			isTodoEditMode && createElement('input', {
+			isTodoEditMode && createElement(LazyInput, {
 				type: 'text',
 				value: todo.estimation,
 				placeholder: '見積もり',
 				size: 4,
-				onChange: e => {
+				onCommit: value => {
 					// FIXME: mutableをやめる
-					const value = e.target.value;
 					const num = Number(value);
 					todo.estimation = Number.isNaN(num) || num < 0 ? undefined : value;
 					saveTodo();
@@ -506,14 +565,14 @@ const TodoRow = ({
 			}),
 		) : todo.type,
 		isTodoEditMode ? createElement(
-			'input',
+			LazyInput,
 			{
 				value: todo.title,
 				placeholder: 'タイトル',
 				size: titleSize,
-				onChange: e => {
+				onCommit: title => {
 					// FIXME: mutableをやめる
-					todo.title = e.target.value;
+					todo.title = title;
 					saveTodo();
 				},
 			},
@@ -528,13 +587,13 @@ const TodoRow = ({
 			) : `(${todo.title || '-'})`
 		),
 		isTodoEditMode ? createElement(
-			'input',
+			LazyInput,
 			{
 				value: todo.memo,
 				placeholder: 'メモ / URL',
-				onChange: e => {
+				onCommit: memo => {
 					// FIXME: mutableをやめる
-					todo.memo = e.target.value;
+					todo.memo = memo;
 					saveTodo();
 				},
 			},
@@ -966,7 +1025,8 @@ const App = () => {
 							accessKey: type.accessKey,
 							onClick: () => {
 								finishAndAddRecord({type: type.name});
-								currentTitleRef.current?.focus();
+								// 新しい記録の入力欄が描画されてからフォーカスする
+								setTimeout(() => currentTitleRef.current?.focus());
 							},
 						},
 						'開始' + (!isTypeEditMode && type.accessKey ? ` (${type.accessKey})` : ''),
@@ -1261,7 +1321,8 @@ const App = () => {
 			),
 		),
 		createElement('h2', {}, '現在'),
-		currentRecord ? createElement(RecordView, {titleRef: currentTitleRef, types, record: currentRecord, save, editTime, hideDate: true}) : '未開始',
+		// 記録が替わったら入力欄を作り直し、前の記録への入力が新しい記録の入力欄に残らないようにする
+		currentRecord ? createElement(RecordView, {key: currentRecord.start, titleRef: currentTitleRef, types, record: currentRecord, save, editTime, hideDate: true}) : '未開始',
 		createElement('h2', {}, '履歴'),
 		createElement('ol', {}, list.map((record) => {
 			return createElement(
