@@ -25,7 +25,7 @@ module.exports = {
 		},
 	}, {
 		// <script type="module"> 以外で読み込まれるもの
-		files: ['chrome-extension/background.js', 'chrome-extension/export.js'],
+		files: ['chrome-extension/background.js'],
 		parserOptions: {
 			sourceType: 'script',
 		},
