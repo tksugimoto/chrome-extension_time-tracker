@@ -1083,7 +1083,8 @@ const App = () => {
 							accessKey: type.accessKey,
 							onClick: () => {
 								finishAndAddRecord({type: type.name});
-								currentTitleRef.current?.focus();
+								// 新しい記録の入力欄が描画されてからフォーカスする
+								setTimeout(() => currentTitleRef.current?.focus());
 							},
 						},
 						'開始' + (!isTypeEditMode && type.accessKey ? ` (${type.accessKey})` : ''),
@@ -1378,7 +1379,8 @@ const App = () => {
 			),
 		),
 		createElement('h2', {}, '現在'),
-		currentRecord ? createElement(RecordView, {titleRef: currentTitleRef, types, record: currentRecord, save, editTime, hideDate: true}) : '未開始',
+		// 記録が替わったら入力欄を作り直し、前の記録への入力が新しい記録の入力欄に残らないようにする
+		currentRecord ? createElement(RecordView, {key: currentRecord.start, titleRef: currentTitleRef, types, record: currentRecord, save, editTime, hideDate: true}) : '未開始',
 		createElement('h2', {}, '履歴'),
 		createElement('ol', {}, list.map((record) => {
 			return createElement(
