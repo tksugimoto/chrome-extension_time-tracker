@@ -149,7 +149,7 @@ export class TimeRecord {
 	 * @param {Todo} todo
 	 */
 	linkTodo(todo) {
-		this.#unlinkTodo();
+		this.#memo ??= this.todo?.memo;
 		this.todo = todo;
 		this.#type = this.#title = undefined;
 		if (this.#memo === todo.memo) this.#memo = undefined;
@@ -311,6 +311,12 @@ export const Formats = {
 export const todoKeyOf = ({type, title}) => JSON.stringify([type, title || '']);
 
 /**
+ * 一覧に表示する（削除していない）ToDo か
+ * @param {Todo} todo
+ */
+export const isActiveTodo = todo => !todo.deleted;
+
+/**
  * 次に追加する ToDo の ID（削除した ToDo も残しているので、ID は使い回さない）
  * @param {{id?: number}[]} todos
  */
@@ -343,7 +349,16 @@ export const createTodoIndex = todos => {
 		if (!indexByKey.has(key)) indexByKey.set(key, i);
 	});
 	return {
-		indexByKey,
+		/**
+		 * 分類・タイトルが一致する ToDo（複数あれば先頭）
+		 * @param {{type: string; title?: string}} todoOrRecord
+		 * @returns {Todo | undefined}
+		 */
+		findByKey: todoOrRecord => todos[indexByKey.get(todoKeyOf(todoOrRecord)) ?? -1],
+		/**
+		 * @param {Todo} todo
+		 */
+		indexOfTodo: todo => indexByTodo.get(todo),
 		/**
 		 * @param {TimeRecord} record
 		 * @returns {number | undefined}
@@ -359,11 +374,11 @@ export const createTodoIndex = todos => {
  * @param {Todo[]} todos 一覧に表示する（削除していない）ToDo
  */
 export const linkRecordsToTodos = (records, todos) => {
-	const {indexByKey} = createTodoIndex(todos);
+	const {findByKey} = createTodoIndex(todos);
 	for (const record of records) {
 		if (record.todo) continue;
-		const i = indexByKey.get(todoKeyOf(record));
-		if (i !== undefined) record.linkTodo(todos[i]);
+		const todo = findByKey(record);
+		if (todo) record.linkTodo(todo);
 	}
 };
 

@@ -1,6 +1,6 @@
 // バックアップファイルの作成と読み込み。chrome API に依存しない処理だけを置く（Node のテストからも読み込む）
 import {isRecordKey, loadRecords, splitLegacyRecords} from './record-storage.js';
-import {parseRecordData} from './utils.js';
+import {isActiveTodo, parseRecordData} from './utils.js';
 
 export const BACKUP_FORMAT = 'time-tracker-backup';
 /**
@@ -60,6 +60,8 @@ const isFiniteNumber = value => typeof value === 'number' && Number.isFinite(val
 
 const isString = value => typeof value === 'string';
 
+const isBoolean = value => typeof value === 'boolean';
+
 /** 任意項目: 未設定 (undefined / null) か、条件を満たす */
 const isOptional = (value, isValid) => value == null || isValid(value);
 
@@ -97,7 +99,7 @@ export const Lists = {
 			if (!isOptional(todo.deadline, isFiniteNumber)) return '期限 (deadline) が数値ではありません';
 			// 入力欄の値（文字列）のまま保存している
 			if (!isOptional(todo.estimation, v => isString(v) || isFiniteNumber(v))) return '見積もり (estimation) が文字列でも数値でもありません';
-			if (!isOptional(todo.deleted, v => typeof v === 'boolean')) return '削除済み (deleted) が真偽値ではありません';
+			if (!isOptional(todo.deleted, isBoolean)) return '削除済み (deleted) が真偽値ではありません';
 		},
 	},
 	type: {
@@ -181,7 +183,7 @@ export const summarize = data => {
 	return Object.fromEntries(Object.entries(Lists).map(([key, {hasDefault}]) => {
 		// 記録は月ごとのキーの合計（main.js と同じく読み込む）。ToDo は削除済み（一覧に表示しないもの）を数えない
 		const list = key === 'record' ? loadRecords(data).records
-			: key === 'todo' ? data.todo?.filter(todo => !todo.deleted)
+			: key === 'todo' ? data.todo?.filter(isActiveTodo)
 			: data[key];
 		if (!list) return [key, hasDefault ? '初期値' : '0 件'];
 		return [key, `${list.length} 件`];

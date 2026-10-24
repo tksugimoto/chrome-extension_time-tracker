@@ -5,7 +5,7 @@ import {
 	startOfDate,
 	TimeRecord,
 	Formats,
-	todoKeyOf,
+	isActiveTodo,
 	nextTodoId,
 	assignTodoIds,
 	createTodoIndex,
@@ -235,7 +235,7 @@ const useRecordList = (todos, isTodosLoaded) => {
 			savedJsonRef.current = savedJson;
 			const todoById = new Map(todos.map(todo => [todo.id, todo]));
 			const list = records.map(record => TimeRecord.load(record, todoById));
-			linkRecordsToTodos(list, todos.filter(todo => !todo.deleted));
+			linkRecordsToTodos(list, todos.filter(isActiveTodo));
 			setList(list);
 			// 以前の形式 (1つのキーに全件・項目名のあるオブジェクト・ToDo を参照しない) から変わった月を保存し直す
 			write(list);
@@ -821,7 +821,7 @@ const App = () => {
 	} = useStorageList('todo', {
 		normalize: assignTodoIds,
 	});
-	const todos = useMemo(() => allTodos.filter(todo => !todo.deleted), [allTodos]);
+	const todos = useMemo(() => allTodos.filter(isActiveTodo), [allTodos]);
 	const [newTodoType, setNewTodoType] = useState('');
 	/** @type{ReturnType<typeof useRef<HTMLInputElement>>} */
 	const currentTitleRef = useRef();
@@ -916,13 +916,7 @@ const App = () => {
 	// 毎秒の再描画で全件を集計し直さないよう、終了済みの記録の集計はメモ化し、計測中の記録だけ毎回加算する
 	// 記録を書き換えたときは save() / add() で allList を作り直すこと（作り直さないとメモ化した集計が古いままになる）
 	const todoIndex = useMemo(() => createTodoIndex(todos), [todos]);
-	/**
-	 * @param {TimeRecord} record
-	 */
-	const findTodo = record => {
-		const i = todoIndex.indexByKey.get(todoKeyOf(record));
-		return i === undefined ? undefined : todos[i];
-	};
+	const findTodo = todoIndex.findByKey;
 	// 作業時間が変わり続けるのは、今日開始した未終了の記録だけ（前日以前の未終了の記録はその日の終わりまでで固定）
 	const today = startOfDate().getTime();
 	const [finishedRecords, runningRecords] = useMemo(() => {
@@ -1158,7 +1152,7 @@ const App = () => {
 				const createList = (list) => {
 					if (list.length === 0) return createElement('ul', {}, createElement('li', {}, 'ToDoなし'));
 					return createElement('ul', {}, list.map((todo) => {
-						const i = todos.indexOf(todo);
+						const i = todoIndex.indexOfTodo(todo);
 						const todoWorkTimeTatal = todoWorkTimes[i].total;
 						const isCurrent = i === currentTodoIndex;
 						const className = isCurrent ? 'current' : undefined;
@@ -1181,7 +1175,7 @@ const App = () => {
 									finishAndAddRecord,
 									types,
 									todoWorkTimeTatal,
-									isDuplicate: todoIndex.indexByKey.get(todoKeyOf(todo)) !== i,
+									isDuplicate: findTodo(todo) !== todo,
 									showSubtotal: () => {
 										setTodoWorkTime(todoWorkTimes[i]);
 										showSubtotalModalDialog();
@@ -1297,7 +1291,7 @@ const App = () => {
 				{
 					onSubmit: e => {
 						e.preventDefault();
-						if (todoIndex.indexByKey.has(todoKeyOf({type: newTodoType, title: newTodoTitle}))) {
+						if (findTodo({type: newTodoType, title: newTodoTitle})) {
 							alert(`ToDo「${newTodoType}(${newTodoTitle || '-'})」は既に存在します`);
 							return;
 						}
