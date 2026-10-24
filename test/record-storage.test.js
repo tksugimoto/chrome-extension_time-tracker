@@ -7,6 +7,7 @@ import {
 	loadRecords,
 	planRecordSave,
 	markUnsaved,
+	toMonthKeys,
 } from '../chrome-extension/record-storage.js';
 
 // 月の境目はローカル時刻で決まるため、ローカル時刻で作る
@@ -147,5 +148,23 @@ describe('markUnsaved', () => {
 		const failed = planRecordSave([sep, {...oct, title: 'changed'}], first.savedJson);
 		markUnsaved(failed.savedJson, failed);
 		assert.deepEqual([...failed.savedJson.keys()], ['record.2026-09']);
+	});
+});
+
+describe('toMonthKeys', () => {
+	const sep = r(at(2026, 9, 30), 'sep');
+	const oct = r(at(2026, 10, 1), 'oct');
+
+	it('以前のキーの記録を月ごとのキーに分け、他のキーは残す', () => {
+		assert.deepEqual(toMonthKeys({record: [sep, oct], todo: []}), {
+			todo: [],
+			'record.2026-09': [sep],
+			'record.2026-10': [oct],
+		});
+	});
+
+	it('以前のキーがなければそのまま返す', () => {
+		const items = {'record.2026-10': [oct]};
+		assert.equal(toMonthKeys(items), items);
 	});
 });

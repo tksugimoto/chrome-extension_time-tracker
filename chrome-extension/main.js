@@ -145,44 +145,38 @@ const useSetting = (settingKey, defaultValue) => {
 };
 
 /**
+ * 保存する一覧。読み込み方と書き込み方は呼び出し側が決める
  * @template T
- * @param {string} storageKey
- * @param {Object} options
- * @param {function(any): T=} options.transform
- * @param {Object[]=} options.defaultValue
+ * @param {function(function(T[]): void): void} load 読み込んだ一覧を渡す。変わったら読み込み直す
+ * @param {function(T[]): void} write
  * @returns {{
  * 	allList: T[]
  * 	add: function(T): void
  * 	save: function(): void
  * }}
  */
-const useStorageList = (storageKey, {
-	transform,
-	defaultValue,
-} = {}) => {
+const useList = (load, write) => {
 	const [allList, setList] = useState(() => {
 		// 変数に入れないと any ではなく never 型となってしまい、 setList 部分で型エラーとなる問題対策
 		const empty = [];
 		return empty;
 	});
 	useEffect(() => {
-		loadFromStorage(storageKey, list => {
-			setList((list ?? defaultValue ?? []).map(transform ?? (v => v)));
-		});
-	}, [storageKey, defaultValue, transform]);
+		load(setList);
+	}, [load]);
 	const refresh = useCallback(() => setList(list => [...list]), []);
 	const add = useCallback(value => {
 		setList(list => {
 			// TODO: setStateのcallbackの中で副作用ありで良いのか確認
 			const newList = [...list, value];
-			saveToStorage(storageKey, newList);
+			write(newList);
 			return newList;
 		});
-	}, [storageKey]);
+	}, [write]);
 	const save = useCallback(() => {
 		refresh();
-		saveToStorage(storageKey, allList);
-	}, [allList, refresh, storageKey]);
+		write(allList);
+	}, [allList, refresh, write]);
 	return {
 		allList,
 		add,
@@ -191,15 +185,32 @@ const useStorageList = (storageKey, {
 };
 
 /**
- * 記録の一覧。useStorageList と同じく使えるが、保存は開始月ごとのキーに分け、変わった月だけ書き込む
- * @returns {ReturnType<typeof useStorageList<TimeRecord>>}
+ * 1つのキーに保存する一覧
+ * @template T
+ * @param {string} storageKey
+ * @param {Object} options
+ * @param {function(any): T=} options.transform
+ * @param {Object[]=} options.defaultValue
+ * @returns {ReturnType<typeof useList<T>>}
+ */
+const useStorageList = (storageKey, {
+	transform,
+	defaultValue,
+} = {}) => {
+	const load = useCallback(setList => {
+		loadFromStorage(storageKey, list => {
+			setList((list ?? defaultValue ?? []).map(transform ?? (v => v)));
+		});
+	}, [storageKey, defaultValue, transform]);
+	const write = useCallback(list => saveToStorage(storageKey, list), [storageKey]);
+	return useList(load, write);
+};
+
+/**
+ * 記録の一覧。保存は開始月ごとのキーに分け、変わった月だけ書き込む
+ * @returns {ReturnType<typeof useList<TimeRecord>>}
  */
 const useRecordList = () => {
-	const [allList, setList] = useState(() => {
-		/** @type {TimeRecord[]} */
-		const empty = [];
-		return empty;
-	});
 	/**
 	 * 月ごとのキーに前回保存した JSON（保存のたびに作り直す）
 	 * 読み込むまでは null（storage の内容が分からないうちに書き込むと、その月の他の記録を消してしまう）
@@ -216,7 +227,7 @@ const useRecordList = () => {
 			markUnsaved(savedJsonRef.current, {items, removeKeys});
 		});
 	}, []);
-	useEffect(() => {
+	const load = useCallback(setList => {
 		chrome.storage.local.get(null, items => {
 			const {records, savedJson} = loadRecords(items, TimeRecord.load);
 			savedJsonRef.current = savedJson;
@@ -225,23 +236,7 @@ const useRecordList = () => {
 			write(records);
 		});
 	}, [write]);
-	const add = useCallback(value => {
-		setList(list => {
-			// TODO: setStateのcallbackの中で副作用ありで良いのか確認
-			const newList = [...list, value];
-			write(newList);
-			return newList;
-		});
-	}, [write]);
-	const save = useCallback(() => {
-		setList(list => [...list]);
-		write(allList);
-	}, [allList, write]);
-	return {
-		allList,
-		add,
-		save,
-	};
+	return useList(load, write);
 };
 
 /** 入力が止まってから反映するまでの時間 */

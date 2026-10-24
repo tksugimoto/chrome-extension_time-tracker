@@ -1,5 +1,5 @@
 // バックアップファイルの作成と読み込み。chrome API に依存しない処理だけを置く（Node のテストからも読み込む）
-import {isRecordKey, loadRecords} from './record-storage.js';
+import {isRecordKey, loadRecords, toMonthKeys} from './record-storage.js';
 
 export const BACKUP_FORMAT = 'time-tracker-backup';
 /** 2: 記録を開始月ごとのキー (record.YYYY-MM) に分けた。1 (record に全件) も読み込める */
@@ -179,14 +179,16 @@ export const keysToRemove = (currentKeys, data) => {
 
 /**
  * バックアップの内容で storage を置き換える
- * 以前の形式 (version 1) の記録 (record) はそのまま書き込み、main.js が開いたときに月ごとのキーへ移す
- * @param {Object<string, any>} data バックアップの data
+ * @param {Object<string, any>} backupData バックアップの data
  * @param {Object} param1
  * @param {Pick<chrome.storage.StorageArea, 'get' | 'set' | 'remove'>} param1.storage
  * @param {function(Object<string, any>): void} param1.saveCurrentData 書き換える前の全データを受け取り、念のため保存する
  * @returns {Promise<void>}
  */
-export const restoreBackup = (data, {storage, saveCurrentData}) => {
+export const restoreBackup = (backupData, {storage, saveCurrentData}) => {
+	// 以前の形式 (version 1) の記録も月ごとのキーで書き込む。record のまま書くと、今の月ごとのキーを消せなかったときに
+	// 月ごとのキーが優先され、復元した記録が使われない（以前のキーと月ごとのキーが両方あるのは、移行の消し損ねだけにする）
+	const data = toMonthKeys(backupData);
 	return storage.get(null).then(currentItems => {
 		saveCurrentData(currentItems);
 		// 先に書き込んでから不要なキーを消す（clear してから書き込むと、書き込みに失敗したときに全データを失う）
