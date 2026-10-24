@@ -125,6 +125,11 @@ describe('parseBackup', () => {
 		assert.deepEqual(parseBackup(toText(backup)), backup);
 	});
 
+	it('ID が null の ToDo は ID なしとみなす（複数あっても重複にしない）', () => {
+		const backup = validBackup({todo: [{id: null, type: 'a', title: 't'}, {id: null, type: 'a', title: 'u'}]});
+		assert.deepEqual(parseBackup(toText(backup)), backup);
+	});
+
 	it('version 2 のバックアップも読み込める', () => {
 		const backup = {...validBackup(), version: 2};
 		assert.deepEqual(parseBackup(toText(backup)), backup);

@@ -167,7 +167,7 @@ export const parseBackup = text => {
 	// 参照先の ToDo が見つからない記録は記録ページで「不明なToDo」と表示できるが、ID の重複は別の ToDo に集計されてしまう
 	const todoIds = new Set();
 	for (const {id} of data.todo ?? []) {
-		if (id === undefined) continue;
+		if (id == null) continue;
 		if (todoIds.has(id)) throw new Error(`ToDo の ID (${id}) が重複しています。`);
 		todoIds.add(id);
 	}
