@@ -11,6 +11,7 @@ import {
 	escapeCharacterClassMetaChar,
 	createDebouncedWriter,
 } from './utils.js';
+import {loadRecords, markUnsaved, planRecordSave} from './record-storage.js';
 
 /** @typedef {import('./utils.js').Todo} Todo */
 
@@ -90,13 +91,23 @@ const loadFromStorage = (key, callback) => {
 		callback(items[key]);
 	});
 };
+/**
+ * items を書き込んでから removeKeys を消す
+ * @param {Object<string, any>} items
+ * @param {string[]=} removeKeys
+ * @returns {Promise<void>} 失敗したときは通知してから reject する
+ */
+const writeToStorage = (items, removeKeys = []) => {
+	return chrome.storage.local.set(items)
+		.then(() => removeKeys.length ? chrome.storage.local.remove(removeKeys) : undefined)
+		.catch(error => {
+			console.error('保存に失敗しました', Object.keys(items), removeKeys, error);
+			alert(`保存に失敗しました。\n直前の変更はページを再読み込みすると失われます。\n\n${error?.message ?? error}`);
+			throw error;
+		});
+};
 const saveToStorage = (key, value) => {
-	chrome.storage.local.set({
-		[key]: value,
-	}).catch(error => {
-		console.error('保存に失敗しました', key, error);
-		alert(`保存に失敗しました。\n直前の変更はページを再読み込みすると失われます。\n\n${error?.message ?? error}`);
-	});
+	writeToStorage({[key]: value}).catch(() => {});
 };
 
 /**
@@ -134,21 +145,17 @@ const useSetting = (settingKey, defaultValue) => {
 };
 
 /**
+ * 保存する一覧。読み込み方と書き込み方は呼び出し側が決める
  * @template T
- * @param {string} storageKey
- * @param {Object} options
- * @param {function(any): T=} options.transform
- * @param {Object[]=} options.defaultValue
+ * @param {function(function(T[]): void): void} load 読み込んだ一覧を渡す。変わったら読み込み直す
+ * @param {function(T[]): void} write
  * @returns {{
  * 	allList: T[]
  * 	add: function(T): void
  * 	save: function(): void
  * }}
  */
-const useStorageList = (storageKey, {
-	transform,
-	defaultValue,
-} = {}) => {
+const useList = (load, write) => {
 	const [allList, setList] = useState(() => {
 		// 変数に入れないと any ではなく never 型となってしまい、 setList 部分で型エラーとなる問題対策
 		const empty = [];
@@ -162,24 +169,78 @@ const useStorageList = (storageKey, {
 		setList(list);
 	}, []);
 	useEffect(() => {
-		loadFromStorage(storageKey, list => {
-			update((list ?? defaultValue ?? []).map(transform ?? (v => v)));
-		});
-	}, [storageKey, defaultValue, transform, update]);
+		load(update);
+	}, [load, update]);
 	const add = useCallback(value => {
 		const newList = [...latestListRef.current, value];
-		saveToStorage(storageKey, newList);
+		write(newList);
 		update(newList);
-	}, [storageKey, update]);
+	}, [write, update]);
 	const save = useCallback(() => {
-		saveToStorage(storageKey, latestListRef.current);
+		write(latestListRef.current);
+		// 記録は書き換えられる (mutable) ため、作り直して描画し直す
 		update([...latestListRef.current]);
-	}, [storageKey, update]);
+	}, [write, update]);
 	return {
 		allList,
 		add,
 		save,
 	};
+};
+
+/**
+ * 1つのキーに保存する一覧
+ * @template T
+ * @param {string} storageKey
+ * @param {Object} options
+ * @param {function(any): T=} options.transform
+ * @param {Object[]=} options.defaultValue
+ * @returns {ReturnType<typeof useList<T>>}
+ */
+const useStorageList = (storageKey, {
+	transform,
+	defaultValue,
+} = {}) => {
+	const load = useCallback(setList => {
+		loadFromStorage(storageKey, list => {
+			setList((list ?? defaultValue ?? []).map(transform ?? (v => v)));
+		});
+	}, [storageKey, defaultValue, transform]);
+	const write = useCallback(list => saveToStorage(storageKey, list), [storageKey]);
+	return useList(load, write);
+};
+
+/**
+ * 記録の一覧。保存は開始月ごとのキーに分け、変わった月だけ書き込む
+ * @returns {ReturnType<typeof useList<TimeRecord>>}
+ */
+const useRecordList = () => {
+	/**
+	 * 月ごとのキーに前回保存した JSON（保存のたびに作り直す）
+	 * 読み込むまでは null（storage の内容が分からないうちに書き込むと、その月の他の記録を消してしまう）
+	 * @type {React.MutableRefObject<Map<string, string> | null>}
+	 */
+	const savedJsonRef = useRef(null);
+	const write = useCallback(list => {
+		if (!savedJsonRef.current) return;
+		const {items, removeKeys, savedJson} = planRecordSave(list, savedJsonRef.current);
+		if (Object.keys(items).length === 0 && removeKeys.length === 0) return;
+		savedJsonRef.current = savedJson;
+		writeToStorage(items, removeKeys).catch(() => {
+			// 次の保存でやり直すよう、書き込めなかった月とキーを保存されていないとみなす（後の保存が先に終わっていても、その分は消さない）
+			markUnsaved(savedJsonRef.current, {items, removeKeys});
+		});
+	}, []);
+	const load = useCallback(setList => {
+		chrome.storage.local.get(null, items => {
+			const {records, savedJson} = loadRecords(items, TimeRecord.load);
+			savedJsonRef.current = savedJson;
+			setList(records);
+			// 以前の形式 (1つのキーに全件) なら、月ごとのキーに移す（移すものがなければ何も書き込まない）
+			write(records);
+		});
+	}, [write]);
+	return useList(load, write);
 };
 
 /** 入力が止まってから反映するまでの時間 */
@@ -815,9 +876,7 @@ const App = () => {
 		allList,
 		add,
 		save,
-	} = useStorageList('record', {
-		transform: TimeRecord.load,
-	});
+	} = useRecordList();
 
 	const [isTypeEditMode, setTypeEditMode] = useState(false);
 	const [isTodoEditMode, setTodoEditMode] = useState(false);
