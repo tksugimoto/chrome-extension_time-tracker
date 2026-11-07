@@ -1,4 +1,3 @@
-// @ts-check
 /* global chrome */
 /* global React, ReactDOM */
 import {
@@ -1032,8 +1031,6 @@ const App = () => {
 		const date = dayOf(base, dayOffset);
 		setTargetRange(date, date);
 	};
-	// @ts-expect-error TS2339: Property 'groupBy' does not exist on type 'MapConstructor'.
-	// もうすぐ型定義が追加される https://github.com/microsoft/TypeScript/pull/56805
 	const grouped = Map.groupBy(allList.filter(record => record.isDateOf(targetDate) && record.start < targetEndMs), ({type}) => type);
 	const totalWorkTimeSeconds = [...grouped.values()].flatMap(records => records.map(record => is勤務外(record.type) ? 0 : record.workTimeSeconds)).reduce((a, b) => a + b, 0);
 
@@ -1254,8 +1251,6 @@ const App = () => {
 				};
 				if (usingTodoGroup) {
 					const groupNothingValue = undefined;
-					// @ts-expect-error TS2339: Property 'groupBy' does not exist on type 'MapConstructor'.
-					// もうすぐ型定義が追加される https://github.com/microsoft/TypeScript/pull/56805
 					const groupdMap = Map.groupBy(todos, (({group}) => todoGroups.includes(group) ? group : groupNothingValue));
 					return createElement(
 						React.Fragment,
@@ -1339,8 +1334,6 @@ const App = () => {
 			usingTodoEstimation && createElement(
 				'ul',
 				{},
-				// @ts-expect-error TS2339: Property 'groupBy' does not exist on type 'MapConstructor'.
-				// もうすぐ型定義が追加される https://github.com/microsoft/TypeScript/pull/56805
 				[...Map.groupBy(todoWorkTimes, ({todo}) => todo.type).entries()].map(([type, sameTypeTodoWorkTimes]) => {
 					const remainTime = sameTypeTodoWorkTimes.reduce((acc, {todo, total}) => {
 						return acc + calculateRemainingTime(todo, total);
@@ -1542,8 +1535,6 @@ const App = () => {
 				isAggregationVisible && createElement(
 					'ul',
 					{},
-					// @ts-expect-error TS2339: Property 'groupBy' does not exist on type 'MapConstructor'.
-					// もうすぐ型定義が追加される https://github.com/microsoft/TypeScript/pull/56805
 					[...Map.groupBy(records, ({title}) => title || '').entries()].map(([title, sameTitleRecords]) => {
 						const sameTitleWorkTimeSeconds = sameTitleRecords.map(record => record.workTimeSeconds).reduce((a, b) => a + b, 0);
 						return {

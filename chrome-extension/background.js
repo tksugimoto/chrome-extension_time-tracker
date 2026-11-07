@@ -25,10 +25,10 @@ const ContextMenus = [{
 }];
 
 chrome.runtime.onInstalled.addListener((details) => {
-	if ([
-		chrome.runtime.OnInstalledReason.INSTALL,
-		chrome.runtime.OnInstalledReason.UPDATE,
-	].includes(details.reason)) openNewTab();
+	if (
+		details.reason === chrome.runtime.OnInstalledReason.INSTALL ||
+		details.reason === chrome.runtime.OnInstalledReason.UPDATE
+	) openNewTab();
 
 	ContextMenus.reduce((promise, contextMenu) => {
 		return promise.then(() => {
@@ -37,10 +37,10 @@ chrome.runtime.onInstalled.addListener((details) => {
 					title: contextMenu.title,
 					contexts: ['action'],
 					id: contextMenu.id,
-				}, resolve);
+				}, () => resolve());
 			});
 		});
-	}, new Promise(resolve => chrome.contextMenus.removeAll(resolve)));
+	}, new Promise(resolve => chrome.contextMenus.removeAll(() => resolve())));
 });
 
 chrome.contextMenus.onClicked.addListener(info => {

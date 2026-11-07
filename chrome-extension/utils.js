@@ -1,5 +1,3 @@
-// @ts-check
-
 export const startOfDate = (date = new Date()) => {
 	date.setHours(0);
 	date.setMinutes(0);

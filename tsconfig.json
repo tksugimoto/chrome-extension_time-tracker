@@ -1,10 +1,11 @@
 {
-	// 型チェック専用 (npm run typecheck)。checkJs は付けず、// @ts-check のあるファイルだけを検査する
+	// 型チェック専用 (npm run typecheck)
 	"compilerOptions": {
 		"allowJs": true,
+		"checkJs": true,
 		"noEmit": true,
-		// lib は target から決まる。ES2024 にすると Map.groupBy の @ts-expect-error (main.js) が不要になりエラーになる
-		"target": "ES2022",
+		// ES2024 のうち Promise.withResolvers は Chrome 119 から。対応する Chrome の最低バージョンより新しい API も型エラーにならないので注意
+		"target": "ES2024",
 		"module": "ESNext",
 		"moduleResolution": "Bundler",
 		// React, ReactDOM を <script> で読み込んだグローバルとして使うため
