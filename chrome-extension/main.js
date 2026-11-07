@@ -155,6 +155,7 @@ const useSetting = (settingKey, defaultValue) => {
  * 	allList: T[]
  * 	add: function(T): void
  * 	save: function(): void
+ * 	remove: function(T): void
  * }}
  */
 const useList = (load, write) => {
@@ -183,10 +184,16 @@ const useList = (load, write) => {
 		// 記録は書き換えられる (mutable) ため、作り直して描画し直す
 		update([...latestListRef.current]);
 	}, [write, update]);
+	const remove = useCallback(value => {
+		const newList = latestListRef.current.filter(v => v !== value);
+		write(newList);
+		update(newList);
+	}, [write, update]);
 	return {
 		allList,
 		add,
 		save,
+		remove,
 	};
 };
 
@@ -413,6 +420,7 @@ const RecordView = ({
  * 	prev?: TimeRecord;
  * 	next?: TimeRecord;
  * 	save: function(): void;
+ * 	remove: function(TimeRecord): void;
  * }} param0
  */
 const EditTimeForm = ({
@@ -420,6 +428,7 @@ const EditTimeForm = ({
 	prev,
 	next,
 	save,
+	remove,
 }) => {
 	const initialStart = Formats.ISODateTimeString(record.start);
 	const initialEnd = record.end ? Formats.ISODateTimeString(record.end) : '';
@@ -437,7 +446,12 @@ const EditTimeForm = ({
 		{
 			method: 'dialog',
 			// 入力値のチェック (前後の記録と重ならない・終了は開始以降) は input の min/max/required で行う
-			onSubmit: () => {
+			onSubmit: e => {
+				const submitter = /** @type {HTMLButtonElement | null} */ (/** @type {SubmitEvent} */ (e.nativeEvent).submitter);
+				if (submitter?.value === 'remove') {
+					remove(record);
+					return;
+				}
 				// datetime-local の値はタイムゾーンなしのため、ローカル時刻として解釈される
 				// 秒未満を落とさないよう、変更していない値は元のまま使う
 				const startMs = start === initialStart ? record.start : new Date(start).getTime();
@@ -479,6 +493,14 @@ const EditTimeForm = ({
 			canResume && '(空欄にすると計測中に戻る)',
 		),
 		createElement('button', {}, '確定'),
+		createElement('button', {
+			value: 'remove',
+			// 入力途中の時刻が不正でも削除できるよう、入力値のチェックをしない
+			formNoValidate: true,
+			onClick: e => {
+				if (!window.confirm('この記録を削除しますか？')) e.preventDefault();
+			},
+		}, '削除'),
 	);
 };
 
@@ -878,6 +900,7 @@ const App = () => {
 		allList,
 		add,
 		save,
+		remove,
 	} = useRecordList();
 
 	const [isTypeEditMode, setTypeEditMode] = useState(false);
@@ -1605,6 +1628,7 @@ const App = () => {
 				prev: allList[editTimeTargetIndex - 1],
 				next: allList[editTimeTargetIndex + 1],
 				save,
+				remove,
 			}),
 		),
 		createElement(
