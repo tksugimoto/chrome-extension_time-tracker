@@ -1353,10 +1353,13 @@ const App = () => {
 				'form',
 				{
 					onSubmit: e => {
-						if (!todoGroups.includes(newTodoGroup)) {
-							addTodoGroup(newTodoGroup);
-						}
 						e.preventDefault();
+						if (todoGroups.includes(newTodoGroup)) {
+							alert(`グループ「${newTodoGroup}」は既に存在します`);
+							return;
+						}
+						addTodoGroup(newTodoGroup);
+						setNewTodoGroup('');
 					},
 				},
 				createElement(
