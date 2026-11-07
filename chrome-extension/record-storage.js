@@ -58,13 +58,13 @@ export const loadRecords = (items, transform = record => record) => {
  * @param {T[]} records
  * @param {Map<string, string>} savedJson キーごとの前回保存した JSON
  * @returns {{
- * 	items: Object<string, T[]>;
+ * 	items: Record<string, T[]>;
  * 	removeKeys: string[];
  * 	savedJson: Map<string, string>;
  * }} items を書き込んでから removeKeys を消す。savedJson は次回に渡す
  */
 export const planRecordSave = (records, savedJson) => {
-	/** @type {Object<string, T[]>} */
+	/** @type {Record<string, T[]>} */
 	const items = {};
 	const nextSavedJson = new Map();
 	for (const [key, list] of groupRecordsByKey(records)) {
