@@ -8,6 +8,7 @@ import {
 	Formats,
 	todoKeyOf,
 	addRecordsToTodoWorkTimes,
+	addToSubtotalByDate,
 	calculateRemainingTime,
 	escapeCharacterClassMetaChar,
 	createDebouncedWriter,
@@ -1030,8 +1031,9 @@ const App = () => {
 		}, {date: 'null', count: 0}).count;
 	}, [allList]);
 
-	/** @type{ReturnType<typeof useState<typeof todoWorkTimes[number]>>} */
-	const [todoWorkTime, setTodoWorkTime] = useState();
+	/** ToDo の時間・日ごとの合計ボタンで開く、日付別の小計 (開いた時点の値) */
+	/** @type{ReturnType<typeof useState<{title: string, total: number, subtotalByDate: Map<string, number>}>>} */
+	const [subtotal, setSubtotal] = useState();
 	const {
 		Dialog: SubtotalDialog,
 		showModalDialog: showSubtotalModalDialog,
@@ -1089,8 +1091,10 @@ const App = () => {
 		const date = dayOf(base, dayOffset);
 		setTargetRange(date, date);
 	};
-	const grouped = Map.groupBy(allList.filter(record => record.isDateOf(targetDate) && record.start < targetEndMs), ({type}) => type);
-	const totalWorkTimeSeconds = [...grouped.values()].flatMap(records => records.map(record => is勤務外(record.type) ? 0 : record.workTimeSeconds)).reduce((a, b) => a + b, 0);
+	const targetRecords = allList.filter(record => record.isDateOf(targetDate) && record.start < targetEndMs);
+	const grouped = Map.groupBy(targetRecords, ({type}) => type);
+	const targetWorkRecords = targetRecords.filter(record => !is勤務外(record.type));
+	const totalWorkTimeSeconds = targetWorkRecords.reduce((acc, record) => acc + record.workTimeSeconds, 0);
 
 	// 計測中の時間を表示し直すための再描画。allList は作り直さないので、allList に依存するメモ化は保たれる
 	const [, rerender] = useReducer(count => count + 1, 0);
@@ -1299,7 +1303,8 @@ const App = () => {
 									todoWorkTimeTatal,
 									isDuplicate: todoIndexByKey.get(key) !== i,
 									showSubtotal: () => {
-										setTodoWorkTime(todoWorkTimes[i]);
+										const {todo: {type, title}, total, subtotalByDate} = todoWorkTimes[i];
+										setSubtotal({title: `${type}(${title})`, total, subtotalByDate});
 										showSubtotalModalDialog();
 									},
 								},
@@ -1548,6 +1553,19 @@ const App = () => {
 			createElement('button', {onClick: () => setTargetDay(targetDate, 1)}, '翌日'),
 			createElement('br'),
 			`勤務時間Total: ${Formats.seconds(totalWorkTimeSeconds)}`,
+			' ',
+			createElement('button', {
+				onClick: () => {
+					// 毎秒の再描画で集計し直さないよう、押したときだけ集計する
+					/** @type{Map<string, number>} */
+					const subtotalByDate = new Map();
+					targetWorkRecords.forEach(record => addToSubtotalByDate(subtotalByDate, record));
+					// 計測中の記録の時間は描画時点から進んでいるので、合計も押したときの小計から出す
+					const total = [...subtotalByDate.values()].reduce((acc, seconds) => acc + seconds, 0);
+					setSubtotal({title: '日ごとの勤務時間', total, subtotalByDate});
+					showSubtotalModalDialog();
+				},
+			}, '日ごとの合計'),
 			createElement('br'),
 			createElement(
 				Checkbox, {
@@ -1663,13 +1681,13 @@ const App = () => {
 		createElement(
 			SubtotalDialog,
 			{},
-			createElement('h3', {}, `${todoWorkTime?.todo.type}(${todoWorkTime?.todo.title})`),
-			todoWorkTime?.total && createElement('p', {}, `合計: ${Formats.seconds(todoWorkTime.total)}`),
+			createElement('h3', {}, subtotal?.title),
+			subtotal && createElement('p', {}, `合計: ${Formats.seconds(subtotal.total)}`),
 			createElement(
 				'ol',
 				{},
-				Array.from(todoWorkTime?.subtotalByDate?.entries() ?? []).map(([date, subtotal]) => {
-					return createElement('li', {key: date}, `${date}: ${Formats.seconds(subtotal)}`);
+				Array.from(subtotal?.subtotalByDate?.entries() ?? []).map(([date, seconds]) => {
+					return createElement('li', {key: date}, `${date}: ${Formats.seconds(seconds)}`);
 				}),
 			),
 		),

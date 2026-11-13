@@ -9,6 +9,7 @@ import {
 	Formats,
 	todoKeyOf,
 	addRecordsToTodoWorkTimes,
+	addToSubtotalByDate,
 	calculateRemainingTime,
 	escapeCharacterClassMetaChar,
 	createDebouncedWriter,
@@ -135,6 +136,24 @@ describe('todoKeyOf', () => {
 
 	it('区切り文字を含んでも別の組み合わせと衝突しない', () => {
 		assert.notEqual(todoKeyOf({type: 'A","B', title: ''}), todoKeyOf({type: 'A', title: 'B'}));
+	});
+});
+
+describe('addToSubtotalByDate', () => {
+	it('開始日の日付ごとに作業時間を足す', () => {
+		const day1 = new Date(2024, 0, 1, 9).getTime();
+		const day2 = new Date(2024, 0, 2, 9).getTime();
+		/** @type{Map<string, number>} */
+		const subtotalByDate = new Map();
+		[
+			TimeRecord.load({type: 'A', start: day1, end: day1 + 60000}),
+			TimeRecord.load({type: 'B', start: day2, end: day2 + 120000}),
+			TimeRecord.load({type: 'A', start: day1 + 60000, end: day1 + 240000}),
+		].forEach(record => addToSubtotalByDate(subtotalByDate, record));
+		assert.deepEqual([...subtotalByDate], [
+			[Formats.localeDateString(day1), 240],
+			[Formats.localeDateString(day2), 120],
+		]);
 	});
 });
 

@@ -231,11 +231,19 @@ export const addRecordsToTodoWorkTimes = (todoWorkTimes, todoIndexByKey, records
 		}
 		const matched = result[i];
 		matched.total += record.workTimeSeconds;
-
-		const date = Formats.localeDateString(record.start);
-		matched.subtotalByDate.set(date, (matched.subtotalByDate.get(date) ?? 0) + record.workTimeSeconds);
+		addToSubtotalByDate(matched.subtotalByDate, record);
 	}
 	return result;
+};
+
+/**
+ * 記録の作業時間を、開始日の日付ごとの小計に加算する (引数の Map を変更する)
+ * @param {Map<string, number>} subtotalByDate
+ * @param {TimeRecord} record
+ */
+export const addToSubtotalByDate = (subtotalByDate, record) => {
+	const date = Formats.localeDateString(record.start);
+	subtotalByDate.set(date, (subtotalByDate.get(date) ?? 0) + record.workTimeSeconds);
 };
 
 /**
