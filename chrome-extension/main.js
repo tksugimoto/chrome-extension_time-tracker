@@ -4,6 +4,7 @@ import {
 	startOfDate,
 	monthRangeOf,
 	dayOf,
+	dayRangeOf,
 	TimeRecord,
 	Formats,
 	todoKeyOf,
@@ -307,6 +308,13 @@ const LazyInput = ({
 
 const titleSize = 40;
 
+/** 記録は日付を跨いでも自動では終了しないため、終了し忘れに気づけるよう、これより長く計測中なら警告する */
+const LONG_RUNNING_HOURS = 12;
+/**
+ * @param {TimeRecord=} record
+ */
+const isLongRunning = record => !!record && !record.end && record.workTimeSeconds > LONG_RUNNING_HOURS * 60 * 60;
+
 /**
  *
  * @param {Object} param0
@@ -318,6 +326,7 @@ const titleSize = 40;
  * @param {boolean=} param0.isEditable
  * @param {boolean=} param0.hideDate
  * @param {any=} param0.titleRef // TODO: type定義
+ * @param {number=} param0.targetSeconds 集計する期間に含まれる作業時間。日付を跨いだ記録で全体と違うときは両方を表示する
  * @param {any=} param0.revision MemoRecordView で描画し直すかの判定にだけ使う
  * @returns
  */
@@ -330,13 +339,17 @@ const RecordView = ({
 	isEditable = true, // FIXME: 名前の適切化
 	hideDate = false,
 	titleRef,
+	targetSeconds,
 }) => {
+	const workTimeSeconds = record.workTimeSeconds;
+	// 日付を跨いだ記録は、終了にも日付を表示する
+	const endsOnStartDate = !record.end || record.end <= dayRangeOf(new Date(record.start)).end;
 	// TODO: 縦位置を揃えたい
 	return createElement(
 		React.Fragment,
 		{},
-		`${Formats[hideDate ? 'localeTimeString' : 'localeDateTimeString'](record.start)}～${record.end ? Formats.localeTimeString(record.end) : ''}`,
-		`(${Formats.seconds(record.workTimeSeconds)})`,
+		`${Formats[hideDate ? 'localeTimeString' : 'localeDateTimeString'](record.start)}～${record.end ? Formats[endsOnStartDate ? 'localeTimeString' : 'localeDateTimeString'](record.end) : ''}`,
+		targetSeconds === undefined || targetSeconds === workTimeSeconds ? `(${Formats.seconds(workTimeSeconds)})` : `(${Formats.seconds(targetSeconds)} / 全体 ${Formats.seconds(workTimeSeconds)})`,
 		editTime && createElement(
 			'button',
 			{
@@ -425,7 +438,7 @@ const MemoRecordView = memo(RecordView, (prev, next) => {
 
 /**
  * 記録の開始・終了時刻を編集する
- * 前後の記録と重ならず、開始日の中 (0:00～24:00) に収まる範囲に制限する
+ * 前後の記録と重ならない範囲に制限する (日付は跨いでもよい)
  * @param {{
  * 	record: TimeRecord;
  * 	prev?: TimeRecord;
@@ -445,24 +458,24 @@ const EditTimeForm = ({
 	const initialEnd = record.end ? Formats.ISODateTimeString(record.end) : '';
 	const [start, setStart] = useState(initialStart);
 	const [end, setEnd] = useState(initialEnd);
-	const min = Formats.ISODateTimeString(Math.max(prev?.end ?? prev?.start ?? 0, startOfDate(new Date(record.start)).getTime()));
-	const maxMs = Math.min(next?.start ?? Date.now(), record.endOfStartDate);
-	const max = Formats.ISODateTimeString(maxMs);
-	// 開始が 24:00 だと翌日の記録扱いになるため、開始は 1 秒手前までにする
-	const startMax = Formats.ISODateTimeString(Math.min(maxMs, record.endOfStartDate - 1000));
-	// 計測中に戻せるのは今日の最後の記録だけ (前日以前は 24:00 で自動終了されるため)
-	const canResume = !next && record.isDateOf(startOfDate());
-	// 削除した時間帯を、同じ日の前後の記録で埋めることもできる
+	const min = Formats.ISODateTimeString(prev?.end ?? prev?.start ?? 0);
+	const max = Formats.ISODateTimeString(next?.start ?? Date.now());
+	// 計測中に戻せるのは、今日まで続いた最後の記録だけ (前に終了した記録を戻すと、その間をすべて数えてしまう)
+	const {start: today, end: tomorrow} = dayRangeOf(new Date());
+	const canResume = !next && record.overlaps(today, tomorrow);
+	// 削除した時間帯を、同じ日の前後の記録で埋めることもできる (日を跨ぐ空き時間まで埋めないよう、同じ日に続く記録に限る)
+	const startDay = dayRangeOf(new Date(record.start));
+	const endDay = dayRangeOf(new Date(record.end ?? Date.now()));
 	const removeOptions = [
 		{value: 'remove', label: '削除', message: 'この記録を削除しますか？'},
-		prev?.endOfStartDate === record.endOfStartDate && {
+		prev?.overlaps(startDay.start, startDay.end) && {
 			value: 'remove-extend-prev',
 			label: '削除して前の記録を延ばす',
 			message: 'この記録を削除し、前の記録の終了をこの記録の終了まで延ばしますか？',
 			// 消す記録が計測中なら、前の記録が計測中になる
 			beforeRemove: () => prev.setTime(prev.start, record.end),
 		},
-		next?.endOfStartDate === record.endOfStartDate && {
+		next?.overlaps(endDay.start, endDay.end) && {
 			value: 'remove-extend-next',
 			label: '削除して次の記録を早める',
 			message: 'この記録を削除し、次の記録の開始をこの記録の開始まで早めますか？',
@@ -504,7 +517,7 @@ const EditTimeForm = ({
 				required: true,
 				value: start,
 				min,
-				max: startMax,
+				max,
 				onChange: e => setStart(e.target.value),
 			}),
 		),
@@ -1008,16 +1021,15 @@ const App = () => {
 		});
 		return todoIndexByKey;
 	}, [todos]);
-	// 作業時間が変わり続けるのは、今日開始した未終了の記録だけ（前日以前の未終了の記録はその日の終わりまでで固定）
-	const today = startOfDate().getTime();
+	// 作業時間が変わり続けるのは、未終了の記録だけ（日付を跨いでも計測を続ける）
 	const [finishedRecords, runningRecords] = useMemo(() => {
 		/** @type{TimeRecord[]} */
 		const finished = [];
 		/** @type{TimeRecord[]} */
 		const running = [];
-		for (const record of allList) (!record.end && record.start >= today ? running : finished).push(record);
+		for (const record of allList) (record.end ? finished : running).push(record);
 		return [finished, running];
-	}, [allList, today]);
+	}, [allList]);
 	const finishedTodoWorkTimes = useMemo(() => {
 		const empty = todos.map(todo => ({todo, total: 0, subtotalByDate: new Map()}));
 		return addRecordsToTodoWorkTimes(empty, todoIndexByKey, finishedRecords);
@@ -1053,15 +1065,16 @@ const App = () => {
 	}, [showEditTimeModalDialog]);
 	const editTimeTargetIndex = editTimeTarget ? allList.indexOf(editTimeTarget.record) : -1;
 
-	// TODO: 日付関連もう少し整理する
-	const list = allList.filter(record => record.isDateOf(startOfDate()));
+	// 今日の記録（前日から続いている記録も含む）。毎秒の再描画では絞り込み直さず、日付が変わったら today の変化で絞り込み直す
+	const {start: today, end: tomorrow} = dayRangeOf(new Date());
+	const list = useMemo(() => allList.filter(record => record.overlaps(today, tomorrow)), [allList, today, tomorrow]);
 
 	const currentRecord = list[list.length - 1];
 
 	const [targetDate, setTargetDate] = useState(startOfDate());
 	/** 集計する最終日 (この日を含む)。未指定なら上限なし */
 	const [targetEndDate, setTargetEndDate] = useState(/** @type{Date=} */ (undefined));
-	const targetEndMs = targetEndDate ? new Date(targetEndDate).setHours(24) : Infinity;
+	const targetEndMs = targetEndDate ? dayRangeOf(targetEndDate).end : Infinity;
 	// 日付の入力欄は入力途中の値を壊さないよう非制御のままにし、ボタンで期間を変えるときは key を変えて作り直す
 	const [targetDateInputKey, renewTargetDateInputKey] = useReducer(count => count + 1, 0);
 	/**
@@ -1089,8 +1102,13 @@ const App = () => {
 		const date = dayOf(base, dayOffset);
 		setTargetRange(date, date);
 	};
-	const grouped = Map.groupBy(allList.filter(record => record.isDateOf(targetDate) && record.start < targetEndMs), ({type}) => type);
-	const totalWorkTimeSeconds = [...grouped.values()].flatMap(records => records.map(record => is勤務外(record.type) ? 0 : record.workTimeSeconds)).reduce((a, b) => a + b, 0);
+	const targetStartMs = dayRangeOf(targetDate).start;
+	// 日付を跨いだ記録は、集計する期間に含まれる分だけを数える
+	/** @param {TimeRecord[]} records */
+	const sumTargetSeconds = records => records.map(record => record.secondsWithin(targetStartMs, targetEndMs)).reduce((a, b) => a + b, 0);
+	const targetRecords = allList.filter(record => record.overlaps(targetStartMs, targetEndMs));
+	const grouped = Map.groupBy(targetRecords, ({type}) => type);
+	const totalWorkTimeSeconds = sumTargetSeconds(targetRecords.filter(record => !is勤務外(record.type)));
 
 	// 計測中の時間を表示し直すための再描画。allList は作り直さないので、allList に依存するメモ化は保たれる
 	const [, rerender] = useReducer(count => count + 1, 0);
@@ -1100,18 +1118,6 @@ const App = () => {
 		}, 1000);
 		return () => window.clearInterval(id);
 	}, []);
-
-	useEffect(() => {
-		// 終了し忘れたまま日付を跨いだ記録は、開始日の 24:00 で終了する
-		// allList は毎秒作り直されないので、ページを開いたまま日付を跨いだときは today の変化で動かす
-		const unfinished = allList.filter(record => !record.end && record.start < today);
-		if (unfinished.length === 0) return;
-		unfinished.forEach(record => {
-			// FIXME: mutableをやめる
-			record.end = record.endOfStartDate;
-		});
-		save();
-	}, [allList, save, today]);
 
 	const finishAndAddRecord = (args) => {
 		// FIXME: mutableをやめる
@@ -1487,7 +1493,8 @@ const App = () => {
 		),
 		createElement('h2', {}, '現在'),
 		// 記録が替わったら入力欄を作り直し、前の記録への入力が新しい記録の入力欄に残らないようにする
-		currentRecord ? createElement(RecordView, {key: currentRecord.start, titleRef: currentTitleRef, types, record: currentRecord, save, editTime, hideDate: true}) : '未開始',
+		currentRecord ? createElement(RecordView, {key: currentRecord.start, titleRef: currentTitleRef, types, record: currentRecord, save, editTime, hideDate: currentRecord.start >= today}) : '未開始',
+		isLongRunning(currentRecord) && createElement('p', {className: 'warning'}, `${LONG_RUNNING_HOURS}時間を超えて計測中です。終了し忘れていたら「時刻編集」で終了時刻を直してください`),
 		createElement('h2', {}, '履歴'),
 		createElement('ol', {}, list.map((record) => {
 			return createElement(
@@ -1495,7 +1502,8 @@ const App = () => {
 				{
 					key: record.start,
 				},
-				createElement(RecordView, {types, record, save, editTime, finishAndAddRecord, hideDate: true}),
+				// 前日から続いている記録は、開始の日付も表示する
+				createElement(RecordView, {types, record, save, editTime, finishAndAddRecord, hideDate: record.start >= today}),
 			);
 		})),
 		createElement('h2', {}, '集計結果'),
@@ -1574,7 +1582,7 @@ const App = () => {
 			'同一タイトルで集約',
 		),
 		createElement('ul', {}, [...grouped.entries()].map(([type, records]) => {
-			const workTimeSeconds = records.map(record => record.workTimeSeconds).reduce((a, b) => a + b, 0);
+			const workTimeSeconds = sumTargetSeconds(records);
 			return {
 				type,
 				records,
@@ -1597,7 +1605,7 @@ const App = () => {
 					'ul',
 					{},
 					[...Map.groupBy(records, ({title}) => title || '').entries()].map(([title, sameTitleRecords]) => {
-						const sameTitleWorkTimeSeconds = sameTitleRecords.map(record => record.workTimeSeconds).reduce((a, b) => a + b, 0);
+						const sameTitleWorkTimeSeconds = sumTargetSeconds(sameTitleRecords);
 						return {
 							title,
 							sameTitleRecords,
@@ -1620,7 +1628,7 @@ const App = () => {
 									{
 										key: record.start,
 									},
-									createElement(MemoRecordView, {types, record, save, editTime, isEditable: false, revision: allList}),
+									createElement(MemoRecordView, {types, record, save, editTime, isEditable: false, targetSeconds: record.secondsWithin(targetStartMs, targetEndMs), revision: allList}),
 								);
 							})),
 						);
@@ -1633,7 +1641,7 @@ const App = () => {
 						{
 							key: record.start,
 						},
-						createElement(MemoRecordView, {types, record, save, editTime, isEditable: false, revision: allList}),
+						createElement(MemoRecordView, {types, record, save, editTime, isEditable: false, targetSeconds: record.secondsWithin(targetStartMs, targetEndMs), revision: allList}),
 					);
 				})),
 			);
