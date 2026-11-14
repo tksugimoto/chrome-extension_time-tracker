@@ -884,6 +884,9 @@ const typesToNamesWithCurrent = (types, current) => {
 	return names.includes(current) ? names : [current, ...names];
 };
 
+/** 古い ToDo を畳むとき、一覧ごとに表示する件数 */
+const recentTodoCount = 5;
+
 const defaultTodoGroups = [
 	'対応待ち',
 	'template',
@@ -913,6 +916,8 @@ const App = () => {
 	const [newTodoTitle, setNewTodoTitle] = useState('');
 	const [newTodoMemo, setNewTodoMemo] = useState('');
 	const [newTodoGroup, setNewTodoGroup] = useState('');
+	// 古い ToDo を表示しているグループ（グループなしは undefined）。開き直すと畳んだ状態に戻る
+	const [expandedTodoLists, setExpandedTodoLists] = useState(() => new Set());
 
 	const {
 		allList: types,
@@ -1285,9 +1290,23 @@ const App = () => {
 			),
 			(() => {
 				const currentKey = currentRecord && todoKeyOf(currentRecord);
-				const createList = (list) => {
+				/**
+				 * @param {Todo[]} list
+				 * @param {string} [listKey] グループ名。グループなしは undefined
+				 */
+				const createList = (list, listKey) => {
 					if (list.length === 0) return createElement('ul', {}, createElement('li', {}, 'ToDoなし'));
-					return createElement('ul', {}, list.map((todo) => {
+					// グループごとの一覧では、計測したことのある ToDo のうち最後に計測した日時が新しいもの・計測したことがない ToDo・計測中の ToDo だけを表示し、残りは畳む。並び順は変えない
+					// グループを使わないときは畳まずに全件表示する
+					// 同じ分類・タイトルの ToDo は先頭の ToDo に集計されるので、先頭の日時を使う
+					const lastWorkedAts = new Map(list.map(todo => [todo, todoWorkTimes[todoIndexByKey.get(todoKeyOf(todo))].lastWorkedAt]));
+					const recentTodos = new Set(list.filter(todo => lastWorkedAts.get(todo) !== undefined)
+						.toSorted((a, b) => lastWorkedAts.get(b) - lastWorkedAts.get(a)).slice(0, recentTodoCount));
+					const collapsedList = !usingTodoGroup ? list : list.filter(todo => recentTodos.has(todo) || lastWorkedAts.get(todo) === undefined || todoKeyOf(todo) === currentKey);
+					const oldTodoCount = list.length - collapsedList.length;
+					const isExpanded = expandedTodoLists.has(listKey);
+					const visibleList = isExpanded ? list : collapsedList;
+					return createElement('ul', {}, visibleList.map((todo) => {
 						const i = todos.indexOf(todo);
 						const todoWorkTimeTatal = todoWorkTimes[i].total;
 						const key = todoKeyOf(todo);
@@ -1321,7 +1340,16 @@ const App = () => {
 								},
 							),
 						);
-					}));
+					}), oldTodoCount > 0 && createElement('li', {},
+						createElement('button', {
+							onClick: () => {
+								const next = new Set(expandedTodoLists);
+								if (isExpanded) next.delete(listKey);
+								else next.add(listKey);
+								setExpandedTodoLists(next);
+							},
+						}, isExpanded ? '古いToDoを隠す' : `古いToDoを表示（${oldTodoCount}件）`),
+					));
 				};
 				if (usingTodoGroup) {
 					const groupNothingValue = undefined;
@@ -1388,7 +1416,7 @@ const App = () => {
 										}, '下へ移動'),
 									),
 								),
-								createList(groupdMap.get(group) ?? []),
+								createList(groupdMap.get(group) ?? [], group),
 							);
 						}),
 					);

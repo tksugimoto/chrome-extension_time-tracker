@@ -205,6 +205,7 @@ export const Formats = {
  * 	todo: Todo;
  * 	total: number;
  * 	subtotalByDate: Map<string, number>;
+ * 	lastWorkedAt?: number; // 最後に計測した日時（計測中なら開始日時）。記録がなければ undefined
  * }} TodoWorkTime */
 
 /**
@@ -231,6 +232,7 @@ export const addRecordsToTodoWorkTimes = (todoWorkTimes, todoIndexByKey, records
 		}
 		const matched = result[i];
 		matched.total += record.workTimeSeconds;
+		matched.lastWorkedAt = Math.max(matched.lastWorkedAt ?? 0, record.end ?? record.start);
 
 		const date = Formats.localeDateString(record.start);
 		matched.subtotalByDate.set(date, (matched.subtotalByDate.get(date) ?? 0) + record.workTimeSeconds);

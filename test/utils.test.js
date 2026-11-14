@@ -155,6 +155,19 @@ describe('addRecordsToTodoWorkTimes', () => {
 		assert.deepEqual([...result.subtotalByDate], [[Formats.localeDateString(start), 180]]);
 	});
 
+	it('最後に計測した日時を持つ', () => {
+		const start = localTime(2026, 9, 23, 9, 0);
+		const [result] = addRecordsToTodoWorkTimes(createTodoWorkTimes(), todoIndexByKey, [
+			TimeRecord.load({...todo, start: start + 60000, end: start + 120000}),
+			TimeRecord.load({...todo, start, end: start + 60000}),
+		]);
+		assert.equal(result.lastWorkedAt, start + 120000);
+		const [notMatched] = addRecordsToTodoWorkTimes(createTodoWorkTimes(), todoIndexByKey, [
+			TimeRecord.load({type: 'B', start, end: start + 60000}),
+		]);
+		assert.equal(notMatched.lastWorkedAt, undefined);
+	});
+
 	it('引数の配列と要素を変更しない', () => {
 		const todoWorkTimes = createTodoWorkTimes();
 		const original = todoWorkTimes[0];
