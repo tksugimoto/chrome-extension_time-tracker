@@ -29,6 +29,13 @@ export const dayOf = (date, dayOffset) => {
 	return new Date(date.getFullYear(), date.getMonth(), date.getDate() + dayOffset);
 };
 
+/**
+ * date の日 (0:00～翌日 0:00) の範囲。日の区切りはここで決める
+ * @param {Date} date
+ * @returns {{start: number, end: number}} [start, end) のミリ秒
+ */
+export const dayRangeOf = date => ({start: dayOf(date, 0).getTime(), end: dayOf(date, 1).getTime()});
+
 export class TimeRecord {
 	constructor(args) {
 		this.start = Date.now();
@@ -45,10 +52,6 @@ export class TimeRecord {
 	finish() {
 		if (this.end) return;
 		this.end = Date.now();
-	}
-	/** 開始日の 24:00 */
-	get endOfStartDate() {
-		return startOfDate(new Date(this.start)).setHours(24);
 	}
 	setType(value) {
 		this.type = value;
@@ -67,17 +70,44 @@ export class TimeRecord {
 		this.start = start;
 		this.end = end;
 	}
+	/** 計測中の記録は、日付を跨いでも今まで数える */
 	get workTimeSeconds() {
-		let end = this.end;
-		if (!end) {
-			if (this.isDateOf(startOfDate())) end = Date.now();
-			else end = this.endOfStartDate;
-		}
-		// TODO: 切り捨てにしないほうが良さそう
-		return Math.floor((end - this.start) / 1000);
+		return this.secondsWithin(-Infinity, Infinity);
 	}
-	isDateOf(targetDate) {
-		return this.start >= targetDate.getTime();
+	/**
+	 * 期間 [rangeStartMs, rangeEndMs) に含まれる作業時間。日付を跨いだ記録を日ごとに分けて集計するときに使う
+	 * @param {number} rangeStartMs
+	 * @param {number} rangeEndMs
+	 */
+	secondsWithin(rangeStartMs, rangeEndMs) {
+		const start = Math.max(this.start, rangeStartMs);
+		const end = Math.min(this.end ?? Date.now(), rangeEndMs);
+		// TODO: 切り捨てにしないほうが良さそう
+		return Math.max(0, Math.floor((end - start) / 1000));
+	}
+	/**
+	 * 期間 [rangeStartMs, rangeEndMs) に開始した記録と、期間より前に開始して期間に入っても続いている記録で true
+	 * @param {number} rangeStartMs
+	 * @param {number} rangeEndMs
+	 */
+	overlaps(rangeStartMs, rangeEndMs) {
+		if (this.start >= rangeStartMs) return this.start < rangeEndMs;
+		return (this.end ?? Infinity) > rangeStartMs;
+	}
+	/**
+	 * 日付ごとの作業時間。日付を跨いだ記録は日の区切り (dayRangeOf) で分ける
+	 * @returns {[date: string, seconds: number][]} date は Formats.localeDateString。長さ 0 の記録も開始日に 0 秒で入れる
+	 */
+	get secondsByDate() {
+		const end = this.end ?? Date.now();
+		/** @type {[date: string, seconds: number][]} */
+		const result = [];
+		let day = dayRangeOf(new Date(this.start));
+		do {
+			result.push([Formats.localeDateString(day.start), this.secondsWithin(day.start, day.end)]);
+			day = dayRangeOf(new Date(day.end));
+		} while (day.start < end);
+		return result;
 	}
 }
 
@@ -230,10 +260,11 @@ export const addRecordsToTodoWorkTimes = (todoWorkTimes, todoIndexByKey, records
 			result[i] = {...result[i], subtotalByDate: new Map(result[i].subtotalByDate)};
 		}
 		const matched = result[i];
-		matched.total += record.workTimeSeconds;
-
-		const date = Formats.localeDateString(record.start);
-		matched.subtotalByDate.set(date, (matched.subtotalByDate.get(date) ?? 0) + record.workTimeSeconds);
+		// 合計は日付ごとの小計を足して、秒未満の切り捨てで小計の和とずれないようにする
+		for (const [date, seconds] of record.secondsByDate) {
+			matched.total += seconds;
+			matched.subtotalByDate.set(date, (matched.subtotalByDate.get(date) ?? 0) + seconds);
+		}
 	}
 	return result;
 };
