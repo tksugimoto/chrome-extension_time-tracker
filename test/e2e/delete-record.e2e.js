@@ -50,7 +50,7 @@ test('記録を削除できる', async () => {
 	await page.waitForTimeout(300);
 	assert.equal(await dialog.count(), 1, 'キャンセルしたらダイアログは開いたまま');
 	assert.equal((await get())[monthKey(a.start)].length, 3);
-	await dialog.getByRole('button', {name: '確定'}).click();
+	await dialog.getByRole('button', {name: '確定', exact: true}).click();
 	await page.waitForTimeout(300);
 
 	// 2. OK すると消える。前の記録 A の時刻は変わらない
@@ -101,12 +101,12 @@ test('記録を削除できる', async () => {
 	await openEdit('P');
 	assert.equal(await dialog.getByRole('button', {name: '削除して前の記録を延ばす'}).count(), 0);
 	assert.equal(await dialog.getByRole('button', {name: '削除して次の記録を早める'}).count(), 1);
-	await dialog.getByRole('button', {name: '確定'}).click();
+	await dialog.getByRole('button', {name: '確定', exact: true}).click();
 	await page.waitForTimeout(300);
 	await openEdit('N');
 	assert.equal(await dialog.getByRole('button', {name: '削除して前の記録を延ばす'}).count(), 1);
 	assert.equal(await dialog.getByRole('button', {name: '削除して次の記録を早める'}).count(), 0);
-	await dialog.getByRole('button', {name: '確定'}).click();
+	await dialog.getByRole('button', {name: '確定', exact: true}).click();
 	await page.waitForTimeout(300);
 
 	// M1 を消して前 (P) を延ばす: P の終了 = M1 の終了

@@ -457,23 +457,29 @@ const EditTimeForm = ({
 	const startMax = Formats.ISODateTimeString(Math.min(maxMs, record.endOfStartDate - 1000));
 	// 計測中に戻せるのは今日の最後の記録だけ (前日以前は 24:00 で自動終了されるため)
 	const canResume = !next && record.isDateOf(startOfDate());
-	// 削除した時間帯を、同じ日の前後の記録で埋めることもできる
+	// 削除・編集した時間帯を、同じ日の前後の記録で埋めることもできる
+	const samePrev = prev?.endOfStartDate === record.endOfStartDate ? prev : undefined;
+	const sameNext = next?.endOfStartDate === record.endOfStartDate ? next : undefined;
 	const removeOptions = [
 		{value: 'remove', label: '削除', message: 'この記録を削除しますか？'},
-		prev?.endOfStartDate === record.endOfStartDate && {
+		samePrev && {
 			value: 'remove-extend-prev',
 			label: '削除して前の記録を延ばす',
 			message: 'この記録を削除し、前の記録の終了をこの記録の終了まで延ばしますか？',
 			// 消す記録が計測中なら、前の記録が計測中になる
-			beforeRemove: () => prev.setTime(prev.start, record.end),
+			beforeRemove: () => samePrev.setTime(samePrev.start, record.end),
 		},
-		next?.endOfStartDate === record.endOfStartDate && {
+		sameNext && {
 			value: 'remove-extend-next',
 			label: '削除して次の記録を早める',
 			message: 'この記録を削除し、次の記録の開始をこの記録の開始まで早めますか？',
-			beforeRemove: () => next.setTime(record.start, next.end),
+			beforeRemove: () => sameNext.setTime(record.start, sameNext.end),
 		},
 	].filter(option => !!option);
+	// 変えた側 (開始なら前、終了なら次) の記録だけを合わせる
+	const adjustPrev = start !== initialStart ? samePrev : undefined;
+	const adjustNext = end !== initialEnd ? sameNext : undefined;
+	const canAdjust = !!adjustPrev || !!adjustNext;
 	return createElement(
 		'form',
 		{
@@ -495,6 +501,10 @@ const EditTimeForm = ({
 				const endMs = end === initialEnd ? record.end : end ? new Date(end).getTime() : undefined;
 				// FIXME: mutableをやめる
 				record.setTime(startMs, endMs);
+				if (submitter?.value === 'save-adjust') {
+					adjustPrev?.setTime(adjustPrev.start, startMs);
+					adjustNext?.setTime(endMs, adjustNext.end);
+				}
 				save();
 			},
 		},
@@ -530,6 +540,12 @@ const EditTimeForm = ({
 			canResume && '(空欄にすると計測中に戻る)',
 		),
 		createElement('button', {}, '確定'),
+		createElement('button', {
+			value: 'save-adjust',
+			disabled: !canAdjust,
+			// 押せないときに理由が分かるようにする
+			title: canAdjust ? undefined : '開始か終了を変えると、変えた側の同じ日の前後の記録に合わせられます',
+		}, '確定して前後の記録も合わせる'),
 		createElement('br'),
 		removeOptions.map(({value, label, message}) => createElement('button', {
 			key: value,
