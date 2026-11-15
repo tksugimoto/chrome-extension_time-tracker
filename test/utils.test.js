@@ -9,6 +9,8 @@ import {
 	Formats,
 	todoKeyOf,
 	addRecordsToTodoWorkTimes,
+	addToSubtotalByDate,
+	sumWorkTimeSecondsBy,
 	calculateRemainingTime,
 	escapeCharacterClassMetaChar,
 	createDebouncedWriter,
@@ -135,6 +137,49 @@ describe('todoKeyOf', () => {
 
 	it('区切り文字を含んでも別の組み合わせと衝突しない', () => {
 		assert.notEqual(todoKeyOf({type: 'A","B', title: ''}), todoKeyOf({type: 'A', title: 'B'}));
+	});
+});
+
+describe('addToSubtotalByDate', () => {
+	it('開始日の日付ごとに作業時間を足す', () => {
+		const day1 = new Date(2024, 0, 1, 9).getTime();
+		const day2 = new Date(2024, 0, 2, 9).getTime();
+		/** @type{Map<string, number>} */
+		const subtotalByDate = new Map();
+		[
+			TimeRecord.load({type: 'A', start: day1, end: day1 + 60000}),
+			TimeRecord.load({type: 'B', start: day2, end: day2 + 120000}),
+			TimeRecord.load({type: 'A', start: day1 + 60000, end: day1 + 240000}),
+		].forEach(record => addToSubtotalByDate(subtotalByDate, record));
+		assert.deepEqual([...subtotalByDate], [
+			[Formats.localeDateString(day1), 240],
+			[Formats.localeDateString(day2), 120],
+		]);
+	});
+});
+
+describe('sumWorkTimeSecondsBy', () => {
+	const item = (type, title, seconds) => ({record: TimeRecord.load({type, title, start: 0, end: 0}), seconds});
+	const items = [
+		item('A', 'x', 60),
+		item('B', '', 300),
+		item('A', 'y', 120),
+		item('A', 'x', 30),
+	];
+	it('キーごとに渡した秒数を合計し、長い順に並べる', () => {
+		assert.deepEqual(sumWorkTimeSecondsBy(items, [({type}) => type]), [
+			{key: 'B', seconds: 300, children: undefined},
+			{key: 'A', seconds: 210, children: undefined},
+		]);
+	});
+	it('キーを複数渡すと入れ子で合計する', () => {
+		assert.deepEqual(sumWorkTimeSecondsBy(items, [({type}) => type, ({title}) => title || '']), [
+			{key: 'B', seconds: 300, children: [{key: '', seconds: 300, children: undefined}]},
+			{key: 'A', seconds: 210, children: [
+				{key: 'y', seconds: 120, children: undefined},
+				{key: 'x', seconds: 90, children: undefined},
+			]},
+		]);
 	});
 });
 
