@@ -37,7 +37,7 @@ test('分類・ToDo・ToDo グループの削除と並び替え', async () => {
 	await h3('A').locator('xpath=following-sibling::ul[1]').locator('li', {hasText: '開始'}).first().getByRole('button', {name: '削除'}).click();
 	await page.waitForTimeout(300);
 	let s = await storage();
-	assert.deepEqual(s.todo.map(t => t.title), ['b1', 'a2']);
+	assert.deepEqual(s.todo.filter(t => !t.deleted).map(t => t.title), ['b1', 'a2'], '削除した ToDo は deleted: true にして残す');
 
 	await h3('C').getByRole('button', {name: '削除'}).click();
 	await page.waitForTimeout(300);
@@ -60,7 +60,7 @@ test('分類・ToDo・ToDo グループの削除と並び替え', async () => {
 	await page.waitForTimeout(800);
 	s = await storage();
 	assert.deepEqual(s.type.map(t => t.name), ['開発', '休憩']);
-	assert.deepEqual(s.todo.map(t => t.title), ['b1', 'a2']);
+	assert.deepEqual(s.todo.filter(t => !t.deleted).map(t => t.title), ['b1', 'a2']);
 	assert.deepEqual(s['todo-group'], ['B', 'A']);
 	const text = await page.evaluate(() => document.body.innerText);
 	assert.ok(!text.includes('a1') && text.indexOf('b1') < text.indexOf('a2'), text);

@@ -32,11 +32,17 @@ describe('RecordView', () => {
 			types: [{name: '開発'}, {name: 'MTG'}],
 			record: window.state.record,
 			save: window.spy('save'),
+			// 一致する ToDo がない
+			findTodo: () => undefined,
 			...props,
 			...spies,
 		}));
 	}, {record, props});
-	const record = () => page.evaluate(() => ({...window.state.record}));
+	// 項目は private なフィールドにあり getter で読むので、展開せず 1 つずつ読む
+	const record = () => page.evaluate(() => {
+		const {start, end, type, title, memo} = window.state.record;
+		return {start, end, type, title, memo};
+	});
 	const saveCount = async () => (await calls('save')).length;
 	const ended = {start: at(0, 9), end: at(0, 10) + 30e3, type: '開発', title: 'レビュー', memo: 'メモ'};
 
@@ -79,6 +85,26 @@ describe('RecordView', () => {
 		await memo.blur();
 		assert.equal((await record()).memo, '新しいメモ');
 		assert.equal(await saveCount(), 3);
+	});
+
+	test('分類・タイトルを変えて一致する ToDo があれば、その ToDo を参照する', async () => {
+		// findTodo は関数なので mount に渡せない。ここで描画する
+		await page.evaluate(record => {
+			const todo = {id: 1, type: '開発', title: 'ToDo のタイトル'};
+			window.state.todo = todo;
+			window.state.record = window.utils.TimeRecord.load(record);
+			window.render(React.createElement(window.main.RecordView, {
+				types: [{name: '開発'}],
+				record: window.state.record,
+				save: window.spy('save'),
+				findTodo: record => (record.type === todo.type && record.title === todo.title ? todo : undefined),
+			}));
+		}, {start: at(0, 9), end: at(0, 10), type: '開発', title: ''});
+		const title = container.getByPlaceholder('タイトル');
+		await title.fill('ToDo のタイトル');
+		await title.blur();
+		assert.equal(await page.evaluate(() => window.state.record.todo === window.state.todo), true);
+		assert.equal(await saveCount(), 1);
 	});
 
 	test('計測中なら「終了」で終わらせ、終わっていれば「再開」で finishAndAddRecord を呼ぶ', async () => {
@@ -124,7 +150,7 @@ describe('MemoRecordView', () => {
 	const title = container.getByPlaceholder('タイトル');
 	const changeTitleAndRerender = revision => page.evaluate(revision => {
 		// 記録は書き換えられる (mutable) ので、同じ記録のまま中身だけ変える
-		window.state.record.title = '変えたタイトル';
+		window.state.record.setTitle('変えたタイトル');
 		window.state.rerender(revision);
 	}, revision);
 	const waitForTitle = value => waitFor(value => document.querySelector('#component-under-test input[placeholder="タイトル"]').value === value, value);
@@ -290,7 +316,8 @@ describe('TodoRow', () => {
 		assert.equal(await page.evaluate(() => window.state.todos.length), 2);
 		await answerConfirm(true);
 		await container.getByRole('button', {name: '削除'}).click();
-		assert.deepEqual(await page.evaluate(() => window.state.todos.map(todo => todo.title)), ['ほかの ToDo']);
+		// 削除した ToDo は、記録から参照できるように deleted: true にして残す
+		assert.deepEqual(await page.evaluate(() => window.state.todos.filter(todo => !todo.deleted).map(todo => todo.title)), ['ほかの ToDo']);
 		assert.deepEqual(await calls('confirm'), [['「開発(レビュー)」を削除しますか？'], ['「開発(レビュー)」を削除しますか？']]);
 		assert.equal(await saveCount(), 1);
 	});

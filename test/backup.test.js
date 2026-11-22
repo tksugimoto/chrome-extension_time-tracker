@@ -36,7 +36,7 @@ describe('createBackup', () => {
 		const data = sampleData();
 		assert.deepEqual(validBackup(data), {
 			format: 'time-tracker-backup',
-			version: 2,
+			version: 3,
 			extensionVersion: '0.1.0',
 			exportedAt: '2026-10-23T01:02:03.000Z',
 			data,
@@ -112,6 +112,29 @@ describe('parseBackup', () => {
 		assert.deepEqual(parseBackup(toText(backup)), backup);
 	});
 
+	it('ToDo を ID で参照する記録 (version 3) も読み込める', () => {
+		const backup = validBackup({
+			'record.2026-10': [[1, 1000, 1], [2, null, 1, 'メモ'], [3, 0, 'a', null, 'm']],
+			todo: [{id: 1, type: 'a', title: 't'}, {id: 2, type: 'a', title: 'u', deleted: true}],
+		});
+		assert.deepEqual(parseBackup(toText(backup)), backup);
+	});
+
+	it('参照先の ToDo がない記録も読み込める（記録ページで不明な ToDo と表示する）', () => {
+		const backup = validBackup({'record.2026-10': [[1, 1000, 5]], todo: []});
+		assert.deepEqual(parseBackup(toText(backup)), backup);
+	});
+
+	it('ID が null の ToDo は ID なしとみなす（複数あっても重複にしない）', () => {
+		const backup = validBackup({todo: [{id: null, type: 'a', title: 't'}, {id: null, type: 'a', title: 'u'}]});
+		assert.deepEqual(parseBackup(toText(backup)), backup);
+	});
+
+	it('version 2 のバックアップも読み込める', () => {
+		const backup = {...validBackup(), version: 2};
+		assert.deepEqual(parseBackup(toText(backup)), backup);
+	});
+
 	it('version 1 のバックアップも読み込める', () => {
 		const backup = {...validBackup(), version: 1};
 		assert.deepEqual(parseBackup(toText(backup)), backup);
@@ -133,7 +156,7 @@ describe('parseBackup', () => {
 		['version が文字列', toText({...validBackup(), version: '1'}), /version: "1"\) が不正/],
 		['version が小数', toText({...validBackup(), version: 1.5}), /が不正/],
 		['version が 0', toText({...validBackup(), version: 0}), /が不正/],
-		['version が新しい', toText({...validBackup(), version: BACKUP_VERSION + 1}), /新しい形式 \(version: 3\).*拡張機能を更新/],
+		['version が新しい', toText({...validBackup(), version: BACKUP_VERSION + 1}), /新しい形式 \(version: 4\).*拡張機能を更新/],
 		['data がない', toText({...validBackup(), data: undefined}), /データ \(data\) がありません/],
 		['data が配列', toText({...validBackup(), data: []}), /データ \(data\) がありません/],
 		['data が null', toText({...validBackup(), data: null}), /データ \(data\) がありません/],
@@ -142,11 +165,20 @@ describe('parseBackup', () => {
 		['todo が配列でない', toText(validBackup({todo: 'x'})), /ToDo \(todo\) が配列ではありません/],
 		['type が配列でない', toText(validBackup({type: 1})), /分類 \(type\) が配列ではありません/],
 		['todo-group が配列でない', toText(validBackup({'todo-group': {}})), /ToDo グループ \(todo-group\) が配列ではありません/],
-		['記録がオブジェクトでない', toText(validBackup({record: [null]})), /記録 \(record\) の 1 件目が不正です: オブジェクトではありません/],
+		['記録がオブジェクトでも配列でもない', toText(validBackup({record: [null]})), /記録 \(record\) の 1 件目が不正です: オブジェクトでも配列でもありません/],
 		['記録の start がない', toText(validBackup({record: [{type: 'a'}]})), /記録 \(record\) の 1 件目.*開始時刻/],
 		['記録の start が文字列', toText(validBackup({record: [{start: '1', type: 'a'}]})), /開始時刻/],
 		['記録の end が文字列', toText(validBackup({record: [{start: 1, end: '2', type: 'a'}]})), /終了時刻/],
 		['記録の type がない', toText(validBackup({record: [{start: 1}]})), /分類/],
+		['記録が文字列', toText(validBackup({'record.2026-10': ['x']})), /記録 \(record.2026-10\) の 1 件目が不正です: オブジェクトでも配列でもありません/],
+		['配列の記録の開始が文字列', toText(validBackup({'record.2026-10': [['1', 0, 1]]})), /開始時刻/],
+		['配列の記録の経過が文字列', toText(validBackup({'record.2026-10': [[1, '0', 1]]})), /終了時刻/],
+		['配列の記録の分類も ToDo の ID もない', toText(validBackup({'record.2026-10': [[1, 0]]})), /分類/],
+		['配列の記録の ToDo の ID が小数', toText(validBackup({'record.2026-10': [[1, 0, 1.5]]})), /ToDo の ID が整数ではありません/],
+		['配列の記録のメモが数値', toText(validBackup({'record.2026-10': [[1, 0, 1, 2]]})), /メモ/],
+		['ToDo の id が文字列', toText(validBackup({todo: [{id: '1', type: 'a', title: 'b'}]})), /ToDo \(todo\) の 1 件目.*ID \(id\)/],
+		['ToDo の deleted が文字列', toText(validBackup({todo: [{id: 1, type: 'a', title: 'b', deleted: 'true'}]})), /削除済み \(deleted\)/],
+		['ToDo の id が重複', toText(validBackup({todo: [{id: 1, type: 'a', title: 'b'}, {id: 1, type: 'a', title: 'c'}]})), /ToDo の ID \(1\) が重複/],
 		['2件目の記録が不正', toText(validBackup({record: [{start: 1, type: 'a'}, {start: 2}]})), /記録 \(record\) の 2 件目が不正です/],
 		['ToDo がオブジェクトでない', toText(validBackup({todo: ['x']})), /ToDo \(todo\) の 1 件目が不正です: オブジェクトではありません/],
 		['ToDo の type がない', toText(validBackup({todo: [{title: 'a'}]})), /ToDo \(todo\) の 1 件目.*分類/],
@@ -186,6 +218,10 @@ describe('summarize', () => {
 
 	it('保存されていない一覧は、既定値を使うものは「初期値」、それ以外は 0 件', () => {
 		assert.deepEqual(summarize({}), {record: '0 件', todo: '0 件', type: '初期値', 'todo-group': '初期値'});
+	});
+
+	it('削除した ToDo は数えない', () => {
+		assert.equal(summarize({todo: [{id: 1, type: 'a', title: 'b'}, {id: 2, type: 'a', title: 'c', deleted: true}]}).todo, '1 件');
 	});
 
 	it('空の配列が保存されていれば 0 件', () => {

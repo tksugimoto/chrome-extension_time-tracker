@@ -81,16 +81,24 @@ describe('useList', () => {
 });
 
 describe('useStorageList', () => {
-	test('キーの一覧を読み込み、transform で変換する。ないときは defaultValue', async () => {
+	test('キーの一覧を読み込む。ないときは defaultValue。normalize が同じ配列を返せば書き込まない', async () => {
 		await resetStorage(page, {type: [{name: '開発'}]});
-		await page.evaluate(() => window.renderHook(window.main.useStorageList, 'type', {transform: v => ({...v, loaded: true})}));
-		await waitFor(() => window.state.hook.allList.length === 1);
-		assert.deepEqual(await page.evaluate(() => window.state.hook.allList), [{name: '開発', loaded: true}]);
+		await page.evaluate(() => window.renderHook(window.main.useStorageList, 'type', {normalize: list => list}));
+		await waitFor(() => window.state.hook.isLoaded);
+		assert.deepEqual(await page.evaluate(() => window.state.hook.allList), [{name: '開発'}]);
 		await unmountAll();
 		await page.evaluate(() => window.renderHook(window.main.useStorageList, 'todo-group', {defaultValue: ['対応待ち']}));
 		await waitFor(() => window.state.hook.allList.length === 1);
 		assert.deepEqual(await page.evaluate(() => window.state.hook.allList), ['対応待ち']);
 		assert.deepEqual(await storage(), {type: [{name: '開発'}]}, '読み込んだだけで書き込んでいる');
+	});
+
+	test('normalize が別の配列を返したら、その一覧を書き込む', async () => {
+		await resetStorage(page, {todo: [{type: '開発', title: 'a'}]});
+		await page.evaluate(() => window.renderHook(window.main.useStorageList, 'todo', {normalize: list => list.map(v => ({...v, id: 1}))}));
+		await waitFor(() => window.state.hook.isLoaded);
+		assert.deepEqual(await page.evaluate(() => window.state.hook.allList), [{type: '開発', title: 'a', id: 1}]);
+		await waitFor(() => chrome.storage.local.get('todo').then(items => items.todo[0].id === 1));
 	});
 
 	test('add・remove はそのキーに書き込む', async () => {
@@ -110,8 +118,11 @@ describe('useRecordList', () => {
 	const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1, 9).getTime();
 	const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1, 9).getTime();
 	const recordOf = (start, title) => ({start, end: start + 3600e3, type: '開発', title});
-	const mount = async count => {
-		await page.evaluate(() => window.renderHook(window.main.useRecordList));
+	/** 保存する形式 (ToDo を参照しない記録の配列) */
+	const savedOf = (start, title) => [start, 3600e3, '開発', title];
+	const mount = async (count, todos = []) => {
+		// ToDo を読み込んでから読み込む
+		await page.evaluate(todos => window.renderHook(window.main.useRecordList, todos, true), todos);
 		await waitFor(count => window.state.hook.allList.length === count, count);
 	};
 
@@ -127,14 +138,21 @@ describe('useRecordList', () => {
 		]);
 	});
 
-	test('以前の形式 (record に全件) なら、読み込んだときに月ごとのキーに移す', async () => {
+	test('以前の形式 (record に全件) なら、読み込んだときに月ごとのキーに移し、項目名を省いた配列にする', async () => {
 		await resetStorage(page, {record: [recordOf(lastMonth, '先月'), recordOf(thisMonth, '今月')]});
 		await mount(2);
 		await waitFor(() => chrome.storage.local.get(null).then(items => !('record' in items)));
 		assert.deepEqual(await storage(), {
-			[recordKeyOf(lastMonth)]: [recordOf(lastMonth, '先月')],
-			[recordKeyOf(thisMonth)]: [recordOf(thisMonth, '今月')],
+			[recordKeyOf(lastMonth)]: [savedOf(lastMonth, '先月')],
+			[recordKeyOf(thisMonth)]: [savedOf(thisMonth, '今月')],
 		});
+	});
+
+	test('分類・タイトルが一致する ToDo があれば、その ToDo を ID で参照する', async () => {
+		await resetStorage(page, {[recordKeyOf(thisMonth)]: [recordOf(thisMonth, '今月')]});
+		await mount(1, [{id: 3, type: '開発', title: '今月'}]);
+		await waitFor(key => chrome.storage.local.get(key).then(items => Array.isArray(items[key][0])), recordKeyOf(thisMonth));
+		assert.deepEqual(await storage(), {[recordKeyOf(thisMonth)]: [[thisMonth, 3600e3, 3]]});
 	});
 
 	test('記録を書き換えて save すると、その記録の月のキーだけを書き込む', async () => {
@@ -153,7 +171,7 @@ describe('useRecordList', () => {
 		});
 		await waitFor(() => window.state.changedKeys.length > 0);
 		assert.deepEqual(await page.evaluate(() => window.state.changedKeys), [recordKeyOf(thisMonth)]);
-		assert.equal((await storage())[recordKeyOf(thisMonth)][0].title, '今月 (変更)');
+		assert.equal((await storage())[recordKeyOf(thisMonth)][0][3], '今月 (変更)');
 	});
 
 	test('add・remove で、その月のキーを書き換える。空になった月のキーは消す', async () => {
@@ -163,6 +181,6 @@ describe('useRecordList', () => {
 		await waitFor(key => chrome.storage.local.get(key).then(items => items[key]?.length === 1), recordKeyOf(thisMonth));
 		await page.evaluate(() => window.state.hook.remove(window.state.hook.allList[0]));
 		await waitFor(key => chrome.storage.local.get(key).then(items => !(key in items)), recordKeyOf(lastMonth));
-		assert.deepEqual(await storage(), {[recordKeyOf(thisMonth)]: [recordOf(thisMonth, '今月')]});
+		assert.deepEqual(await storage(), {[recordKeyOf(thisMonth)]: [savedOf(thisMonth, '今月')]});
 	});
 });

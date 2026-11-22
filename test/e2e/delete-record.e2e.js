@@ -6,7 +6,7 @@
 //   - 「削除して前の記録を延ばす」「削除して次の記録を早める」で前後の記録の時刻が変わる（同じ日の前後があるときだけ出る）
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {launchExtension, resetStorage} from './extension.js';
+import {launchExtension, readStorage, resetStorage, withRecordObjects} from './extension.js';
 import {recordKeyOf as monthKey} from '../../chrome-extension/record-storage.js';
 
 test('記録を削除できる', async () => {
@@ -33,7 +33,8 @@ test('記録を削除できる', async () => {
 	});
 	await page.reload();
 	await page.getByText('履歴総数: 4').waitFor();
-	const get = () => page.evaluate(() => chrome.storage.local.get(null));
+	// 記録は項目名のある形にして比べる
+	const get = () => readStorage(page).then(withRecordObjects);
 	const dialog = page.locator('dialog[open]');
 	// 今日の記録の行の「時刻編集」を押す (title で探す)
 	const openEdit = async title => {

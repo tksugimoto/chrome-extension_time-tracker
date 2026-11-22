@@ -8,9 +8,10 @@ import {createBackup} from '../../chrome-extension/backup.js';
 test('バックアップから復元できる', async () => {
 	const {ctx, base, errors} = await launchExtension({acceptDownloads: true});
 
-	// 記録は月ごとのキーをまとめて比べる
+	// 記録は月ごとのキーをまとめて比べる。ToDo の ID は記録ページが振るので除いて比べる
 	const normalize = items => {
 		const rest = Object.fromEntries(Object.entries(items).filter(([key]) => !isRecordKey(key)));
+		if (rest.todo) rest.todo = rest.todo.map(todo => Object.fromEntries(Object.entries(todo).filter(([key]) => key !== 'id')));
 		return Object.keys(items).some(isRecordKey) ? {record: recordsOf(items), ...rest} : rest;
 	};
 	const storedItems = p => p.evaluate(() => chrome.storage.local.get(null)).then(normalize);

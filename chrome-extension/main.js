@@ -6,7 +6,11 @@ import {
 	dayOf,
 	TimeRecord,
 	Formats,
-	todoKeyOf,
+	isActiveTodo,
+	nextTodoId,
+	assignTodoIds,
+	createTodoIndex,
+	linkRecordsToTodos,
 	addRecordsToTodoWorkTimes,
 	sumWorkTimeSecondsBy,
 	calculateRemainingTime,
@@ -192,28 +196,36 @@ export const useList = (load, write) => {
  * @template T
  * @param {string} storageKey
  * @param {Object} options
- * @param {function(any): T=} options.transform
+ * @param {function(any[]): T[]=} options.normalize 読み込んだ一覧を今の形式にする。変わったら（別の配列を返したら）保存し直す
  * @param {Object[]=} options.defaultValue
- * @returns {ReturnType<typeof useList<T>>}
+ * @returns {ReturnType<typeof useList<T>> & {isLoaded: boolean}}
  */
 export const useStorageList = (storageKey, {
-	transform,
+	normalize,
 	defaultValue,
 } = {}) => {
+	const [isLoaded, setLoaded] = useState(false);
 	const load = useCallback(setList => {
-		loadFromStorage(storageKey, list => {
-			setList((list ?? defaultValue ?? []).map(transform ?? (v => v)));
+		loadFromStorage(storageKey, savedList => {
+			const list = savedList ?? defaultValue ?? [];
+			const normalized = normalize ? normalize(list) : list;
+			if (normalized !== list) saveToStorage(storageKey, normalized);
+			setList(normalized);
+			setLoaded(true);
 		});
-	}, [storageKey, defaultValue, transform]);
+	}, [storageKey, defaultValue, normalize]);
 	const write = useCallback(list => saveToStorage(storageKey, list), [storageKey]);
-	return useList(load, write);
+	return {...useList(load, write), isLoaded};
 };
 
 /**
  * 記録の一覧。保存は開始月ごとのキーに分け、変わった月だけ書き込む
+ * 記録は ToDo を参照するため、ToDo を読み込んでから読み込む
+ * @param {Todo[]} todos 削除した ToDo も含む
+ * @param {boolean} isTodosLoaded
  * @returns {ReturnType<typeof useList<TimeRecord>>}
  */
-export const useRecordList = () => {
+export const useRecordList = (todos, isTodosLoaded) => {
 	/**
 	 * 月ごとのキーに前回保存した JSON（保存のたびに作り直す）
 	 * 読み込むまでは null（storage の内容が分からないうちに書き込むと、その月の他の記録を消してしまう）
@@ -222,23 +234,38 @@ export const useRecordList = () => {
 	const savedJsonRef = useRef(null);
 	const write = useCallback(list => {
 		if (!savedJsonRef.current) return;
-		const {items, removeKeys, savedJson} = planRecordSave(list, savedJsonRef.current);
+		const {items, removeKeys, savedJson} = planRecordSave(/** @type {TimeRecord[]} */ (list), savedJsonRef.current);
 		if (Object.keys(items).length === 0 && removeKeys.length === 0) return;
 		savedJsonRef.current = savedJson;
-		writeToStorage(items, removeKeys).catch(() => {
+		// storage は toJSON を使わずに保存するため、保存する形式（配列）にしてから渡す
+		const savedItems = Object.fromEntries(Object.entries(items).map(([key, records]) => [key, records.map(record => record.toJSON())]));
+		writeToStorage(savedItems, removeKeys).catch(() => {
 			// 次の保存でやり直すよう、書き込めなかった月とキーを保存されていないとみなす（後の保存が先に終わっていても、その分は消さない）
 			markUnsaved(savedJsonRef.current, {items, removeKeys});
 		});
 	}, []);
+	// 読み込み後に ToDo を変えても、記録は同じ ToDo のオブジェクトを参照し続けるので読み込み直さない
+	// ※ ToDo の編集はオブジェクトを書き換えている (FIXME: mutableをやめる) ため。ToDo のオブジェクトを作り直すようにしたら、
+	//   記録の分類・タイトルの表示は古い ToDo のままになる（集計は ID で引くので外れない）ので、記録の todo も差し替えること
+	const todosRef = useRef(todos);
+	todosRef.current = todos;
 	const load = useCallback(setList => {
+		if (!isTodosLoaded) return;
 		chrome.storage.local.get(null, items => {
-			const {records, savedJson} = loadRecords(items, TimeRecord.load);
+			const todos = todosRef.current;
+			const todoById = new Map(todos.map(todo => [todo.id, todo]));
+			const {records, savedJson} = loadRecords(items, record => TimeRecord.load(record, todoById));
+			// 項目名のあるオブジェクト（以前の形式）で保存している月は、読み込んだ後の JSON が同じでも配列で保存し直す
+			for (const key of savedJson.keys()) {
+				if (/** @type {unknown[]} */ (items[key]).some(record => !Array.isArray(record))) savedJson.set(key, '');
+			}
 			savedJsonRef.current = savedJson;
+			linkRecordsToTodos(records, todos.filter(isActiveTodo));
 			setList(records);
-			// 以前の形式 (1つのキーに全件) なら、月ごとのキーに移す（移すものがなければ何も書き込まない）
+			// 以前の形式 (1つのキーに全件・項目名のあるオブジェクト・ToDo を参照しない) から変わった月を保存し直す（なければ何も書き込まない）
 			write(records);
 		});
-	}, [write]);
+	}, [isTodosLoaded, write]);
 	return useList(load, write);
 };
 
@@ -303,6 +330,7 @@ const titleSize = 40;
  * @param {{name: string}[]} param0.types
  * @param {TimeRecord} param0.record
  * @param {function(): void} param0.save
+ * @param {function(TimeRecord): (Todo | undefined)} param0.findTodo 記録に参照させる ToDo (createTodoIndex の findTodoToLink)
  * @param {function(TimeRecord): void=} param0.editTime
  * @param {function(TimeRecord): void=} param0.finishAndAddRecord
  * @param {boolean=} param0.isEditable
@@ -315,12 +343,24 @@ export const RecordView = ({
 	types,
 	record,
 	save,
+	findTodo,
 	editTime,
 	finishAndAddRecord,
 	isEditable = true, // FIXME: 名前の適切化
 	hideDate = false,
 	titleRef,
 }) => {
+	/**
+	 * 分類・タイトルを変えたら、一致する ToDo を参照し直す（なければ ToDo を参照しない記録になる）
+	 * @param {function(): void} update
+	 */
+	const updateTypeOrTitle = update => {
+		// FIXME: mutableをやめる
+		update();
+		const todo = findTodo(record);
+		if (todo) record.linkTodo(todo);
+		save();
+	};
 	// TODO: 縦位置を揃えたい
 	return createElement(
 		React.Fragment,
@@ -341,9 +381,7 @@ export const RecordView = ({
 			{
 				value: record.type,
 				onChange: e => {
-					// FIXME: mutableをやめる
-					record.setType(e.target.value);
-					save();
+					updateTypeOrTitle(() => record.setType(e.target.value));
 				},
 			},
 			typesToNamesWithCurrent(types, record.type).map((type, i) => {
@@ -361,9 +399,7 @@ export const RecordView = ({
 				placeholder: 'タイトル',
 				size: titleSize,
 				onCommit: title => {
-					// FIXME: mutableをやめる
-					record.setTitle(title);
-					save();
+					updateTypeOrTitle(() => record.setTitle(title));
 				},
 			},
 		),
@@ -539,7 +575,6 @@ const closeToDeadlineMs = 3 * 24 * 60 * 60 * 1000;
  * 	usingTodoGroup: boolean;
  * 	usingTodoDeadline: boolean;
  * 	usingTodoEstimation: boolean;
- * 	todos: Todo[],
  * 	todoGroups: string[],
  * 	saveTodo: function(): void
  * 	finishAndAddRecord: function(TimeRecord | Todo): void
@@ -556,7 +591,6 @@ export const TodoRow = ({
 	usingTodoGroup,
 	usingTodoDeadline,
 	usingTodoEstimation,
-	todos,
 	todoGroups,
 	saveTodo,
 	finishAndAddRecord,
@@ -566,7 +600,6 @@ export const TodoRow = ({
 	showSubtotal,
 }) => {
 	const hasUrlMemo = !!todo.memo?.match(/^http[^ ]+$/);
-	const i = todos.indexOf(todo);
 	return createElement(
 		React.Fragment,
 		{},
@@ -577,9 +610,9 @@ export const TodoRow = ({
 					const desc = todo.title || todo.memo || '-';
 					const message = `「${todo.type}(${desc})」を削除しますか？`;
 					if (window.confirm(message)) {
+						// 記録が参照しているため消さずに残し、一覧に表示しない
 						// FIXME: mutableをやめる
-						// todos.toSpliced が使える
-						todos.splice(i, 1);
+						todo.deleted = true;
 						saveTodo();
 					}
 				},
@@ -712,7 +745,7 @@ export const TodoRow = ({
 		) : hasUrlMemo ? '' : todo.memo,
 		isDuplicate && createElement('span', {
 			className: 'duplicate-todo',
-		}, '※分類・タイトルが重複（時間は先に登録したToDoに計上）'),
+		}, '※分類・タイトルが重複（ToDoから開始していない記録の時間は先に登録したToDoに計上）'),
 	);
 };
 
@@ -935,10 +968,14 @@ const MemoWorkTimeTreeList = memo(WorkTimeTreeList);
 
 const App = () => {
 	const {
-		allList: todos,
+		allList: allTodos,
+		isLoaded: isTodosLoaded,
 		add: addTodo,
 		save: saveTodo,
-	} = useStorageList('todo');
+	} = useStorageList('todo', {
+		normalize: assignTodoIds,
+	});
+	const todos = useMemo(() => allTodos.filter(isActiveTodo), [allTodos]);
 	const [newTodoType, setNewTodoType] = useState('');
 	/** @type{ReturnType<typeof useRef<HTMLInputElement>>} */
 	const currentTitleRef = useRef();
@@ -974,7 +1011,7 @@ const App = () => {
 		add,
 		save,
 		remove,
-	} = useRecordList();
+	} = useRecordList(allTodos, isTodosLoaded);
 
 	const [isTypeEditMode, setTypeEditMode] = useState(false);
 	const [isTodoEditMode, setTodoEditMode] = useState(false);
@@ -1045,15 +1082,8 @@ const App = () => {
 
 	// 毎秒の再描画で全件を集計し直さないよう、終了済みの記録の集計はメモ化し、計測中の記録だけ毎回加算する
 	// 記録を書き換えたときは save() / add() で allList を作り直すこと（作り直さないとメモ化した集計が古いままになる）
-	const todoIndexByKey = useMemo(() => {
-		/** @type{Map<string, number>} */
-		const todoIndexByKey = new Map();
-		todos.forEach((todo, i) => {
-			const key = todoKeyOf(todo);
-			if (!todoIndexByKey.has(key)) todoIndexByKey.set(key, i);
-		});
-		return todoIndexByKey;
-	}, [todos]);
+	const todoIndex = useMemo(() => createTodoIndex(todos), [todos]);
+	const findTodo = todoIndex.findTodoToLink;
 	// 作業時間が変わり続けるのは、今日開始した未終了の記録だけ（前日以前の未終了の記録はその日の終わりまでで固定）
 	const today = startOfDate().getTime();
 	const [finishedRecords, runningRecords] = useMemo(() => {
@@ -1066,9 +1096,9 @@ const App = () => {
 	}, [allList, today]);
 	const finishedTodoWorkTimes = useMemo(() => {
 		const empty = todos.map(todo => ({todo, total: 0, subtotalByDate: new Map()}));
-		return addRecordsToTodoWorkTimes(empty, todoIndexByKey, finishedRecords);
-	}, [todos, todoIndexByKey, finishedRecords]);
-	const todoWorkTimes = addRecordsToTodoWorkTimes(finishedTodoWorkTimes, todoIndexByKey, runningRecords);
+		return addRecordsToTodoWorkTimes(empty, todoIndex.indexOf, finishedRecords);
+	}, [todos, todoIndex, finishedRecords]);
+	const todoWorkTimes = addRecordsToTodoWorkTimes(finishedTodoWorkTimes, todoIndex.indexOf, runningRecords);
 
 	const recordedDayCount = useMemo(() => {
 		return allList.map(record => Formats.localeDateString(record.start)).reduce((acc, date) => {
@@ -1168,7 +1198,13 @@ const App = () => {
 	const finishAndAddRecord = (args) => {
 		// FIXME: mutableをやめる
 		currentRecord?.finish();
-		add(new TimeRecord(args));
+		const record = new TimeRecord(args);
+		// ToDo を参照していない記録や、削除した ToDo の記録を再開したときは、一致する ToDo があればそれを参照する
+		if (!record.todo || record.todo.deleted) {
+			const todo = findTodo(record);
+			if (todo) record.linkTodo(todo);
+		}
+		add(record);
 	};
 
 	return createElement(
@@ -1332,7 +1368,7 @@ const App = () => {
 				'見積もりを管理する',
 			),
 			(() => {
-				const currentKey = currentRecord && todoKeyOf(currentRecord);
+				const currentTodoIndex = currentRecord && todoIndex.indexOf(currentRecord);
 				/**
 				 * @param {Todo[]} list
 				 * @param {string} [listKey] グループ名。グループなしは undefined
@@ -1342,25 +1378,23 @@ const App = () => {
 					// グループごとの一覧では、計測したことのある ToDo のうち最後に計測した日時が新しいもの・計測したことがない ToDo・計測中の ToDo・
 					// 期限切れか期限が近い ToDo（期限を管理するとき）だけを表示し、残りは畳む。並び順は変えない
 					// グループを使わないときは畳まずに全件表示する
-					// 同じ分類・タイトルの ToDo は先頭の ToDo に集計されるので、先頭の日時を使う
-					const lastWorkedAts = new Map(list.map(todo => [todo, todoWorkTimes[todoIndexByKey.get(todoKeyOf(todo))].lastWorkedAt]));
+					const lastWorkedAts = new Map(list.map(todo => [todo, todoWorkTimes[todoIndex.indexOfTodo(todo)].lastWorkedAt]));
 					const recentTodos = new Set(list.filter(todo => lastWorkedAts.get(todo) !== undefined)
 						.toSorted((a, b) => lastWorkedAts.get(b) - lastWorkedAts.get(a)).slice(0, recentTodoCount));
-					const collapsedList = !usingTodoGroup ? list : list.filter(todo => recentTodos.has(todo) || lastWorkedAts.get(todo) === undefined || todoKeyOf(todo) === currentKey
+					const collapsedList = !usingTodoGroup ? list : list.filter(todo => recentTodos.has(todo) || lastWorkedAts.get(todo) === undefined || todoIndex.indexOfTodo(todo) === currentTodoIndex
 						|| (usingTodoDeadline && !!todo.deadline && todo.deadline < Date.now() + closeToDeadlineMs));
 					const oldTodoCount = list.length - collapsedList.length;
 					const isExpanded = expandedTodoLists.has(listKey);
 					const visibleList = isExpanded ? list : collapsedList;
 					return createElement('ul', {}, visibleList.map((todo) => {
-						const i = todos.indexOf(todo);
+						const i = todoIndex.indexOfTodo(todo);
 						const todoWorkTimeTatal = todoWorkTimes[i].total;
-						const key = todoKeyOf(todo);
-						const isCurrent = key === currentKey;
+						const isCurrent = i === currentTodoIndex;
 						const className = isCurrent ? 'current' : undefined;
 						return createElement(
 							'li',
 							{
-								key: i,
+								key: todo.id,
 								className,
 							},
 							createElement(
@@ -1371,13 +1405,12 @@ const App = () => {
 									usingTodoGroup,
 									usingTodoDeadline,
 									usingTodoEstimation,
-									todos,
 									todoGroups,
 									saveTodo,
 									finishAndAddRecord,
 									types,
 									todoWorkTimeTatal,
-									isDuplicate: todoIndexByKey.get(key) !== i,
+									isDuplicate: todoIndex.findByKey(todo) !== todo,
 									showSubtotal: () => {
 										const {todo: {type, title}, total, subtotalByDate} = todoWorkTimes[i];
 										const byDate = [...subtotalByDate].map(([key, seconds]) => ({key, seconds}));
@@ -1460,7 +1493,7 @@ const App = () => {
 				}
 				return createList(todos);
 			})(),
-			'※ ToDoごとの経過時間の集計には分類・タイトルのみを使用し、メモ / URLの違いを無視する',
+			'※ ToDoから開始した記録はそのToDoに集計する（ToDoの分類・タイトルを変えても引き継ぐ）。それ以外の記録は分類・タイトルが一致するToDoに集計し、メモ / URLの違いを無視する',
 			// TODO: 表示方法調整(グループ別対応？)
 			usingTodoEstimation && createElement(
 				'p',
@@ -1512,15 +1545,20 @@ const App = () => {
 				{
 					onSubmit: e => {
 						e.preventDefault();
-						if (todoIndexByKey.has(todoKeyOf({type: newTodoType, title: newTodoTitle}))) {
+						if (todoIndex.findByKey({type: newTodoType, title: newTodoTitle})) {
 							alert(`ToDo「${newTodoType}(${newTodoTitle || '-'})」は既に存在します`);
 							return;
 						}
-						addTodo({
+						const todo = {
+							id: nextTodoId(allTodos),
 							type: newTodoType,
 							title: newTodoTitle,
 							memo: newTodoMemo,
-						});
+						};
+						addTodo(todo);
+						// 分類・タイトルが一致する既存の記録も、ページを開き直さずにこの ToDo を参照させる
+						linkRecordsToTodos(allList, [todo]);
+						save();
 						setNewTodoTitle('');
 						setNewTodoMemo('');
 					},
@@ -1569,7 +1607,7 @@ const App = () => {
 		createElement('h2', {}, '現在'),
 		// 記録が替わったら入力欄を作り直し、前の記録への入力が新しい記録の入力欄に残らないようにする
 		// 終了・再開は下の専用ボタンで行うので、行ごとの終了・再開ボタンは出さない (isEditable: false)
-		currentRecord ? createElement(RecordView, {key: currentRecord.start, titleRef: currentTitleRef, types, record: currentRecord, save, editTime, isEditable: false, hideDate: true}) : '未開始',
+		currentRecord ? createElement(RecordView, {key: currentRecord.start, titleRef: currentTitleRef, types, record: currentRecord, save, findTodo, editTime, isEditable: false, hideDate: true}) : '未開始',
 		createElement(
 			'button',
 			{
@@ -1600,7 +1638,7 @@ const App = () => {
 				{
 					key: record.start,
 				},
-				createElement(RecordView, {types, record, save, editTime, finishAndAddRecord, hideDate: true}),
+				createElement(RecordView, {types, record, save, findTodo, editTime, finishAndAddRecord, hideDate: true}),
 			);
 		})),
 		createElement('h2', {}, '集計結果'),
@@ -1745,7 +1783,7 @@ const App = () => {
 									{
 										key: record.start,
 									},
-									createElement(MemoRecordView, {types, record, save, editTime, isEditable: false, revision: allList}),
+									createElement(MemoRecordView, {types, record, save, findTodo, editTime, isEditable: false, revision: allList}),
 								);
 							})),
 						);
@@ -1758,7 +1796,7 @@ const App = () => {
 						{
 							key: record.start,
 						},
-						createElement(MemoRecordView, {types, record, save, editTime, isEditable: false, revision: allList}),
+						createElement(MemoRecordView, {types, record, save, findTodo, editTime, isEditable: false, revision: allList}),
 					);
 				})),
 			);
