@@ -188,7 +188,7 @@ describe('EditTimeForm', () => {
 		await mount({record, prev, next});
 		const newEnd = (await isoDateTime(at(0, 10) + 30 * 60e3)).slice(0, 16);
 		await endInput.fill(newEnd);
-		await container.getByRole('button', {name: '確定'}).click();
+		await container.getByRole('button', {name: '確定', exact: true}).click();
 		assert.deepEqual((await state()).record, {start: record.start, end: at(0, 10) + 30 * 60e3});
 		assert.equal((await calls('save')).length, 1);
 		assert.deepEqual(await calls('remove'), []);
@@ -196,7 +196,7 @@ describe('EditTimeForm', () => {
 
 	test('「削除」は確認して OK なら remove を呼び、キャンセルなら呼ばない', async () => {
 		await mount({record});
-		assert.deepEqual(await container.getByRole('button').allTextContents(), ['確定', '削除']);
+		assert.deepEqual(await container.getByRole('button').allTextContents(), ['確定', '確定して前後の記録も合わせる', '削除']);
 		await answerConfirm(false);
 		await container.getByRole('button', {name: '削除'}).click();
 		assert.deepEqual(await calls('remove'), []);
@@ -209,7 +209,7 @@ describe('EditTimeForm', () => {
 
 	test('同じ日の前後があれば、削除して前を延ばす・次を早めることもできる', async () => {
 		await mount({record, prev, next});
-		assert.deepEqual(await container.getByRole('button').allTextContents(), ['確定', '削除', '削除して前の記録を延ばす', '削除して次の記録を早める']);
+		assert.deepEqual(await container.getByRole('button').allTextContents(), ['確定', '確定して前後の記録も合わせる', '削除', '削除して前の記録を延ばす', '削除して次の記録を早める']);
 		await answerConfirm(true);
 		await container.getByRole('button', {name: '削除して前の記録を延ばす'}).click();
 		assert.deepEqual((await state()).prev, {start: prev.start, end: record.end});
@@ -220,7 +220,7 @@ describe('EditTimeForm', () => {
 
 	test('前日の記録が前にあっても、前を延ばす削除は出さない', async () => {
 		await mount({record, prev: {start: at(-1, 22), end: at(-1, 23), type: '開発'}});
-		assert.deepEqual(await container.getByRole('button').allTextContents(), ['確定', '削除']);
+		assert.deepEqual(await container.getByRole('button').allTextContents(), ['確定', '確定して前後の記録も合わせる', '削除']);
 	});
 });
 

@@ -58,7 +58,7 @@ test('記録の開始・終了・編集と、分類・ToDo の追加ができる
 	await page.getByRole('button', {name: '時刻編集'}).first().dispatchEvent('click');
 	await page.waitForTimeout(300);
 	assert.ok(await page.locator('dialog[open]').count() === 1, 'ダイアログが開かない');
-	await page.locator('dialog[open]').getByRole('button', {name: '確定'}).click();
+	await page.locator('dialog[open]').getByRole('button', {name: '確定', exact: true}).click();
 	await page.waitForTimeout(300);
 	// 分類の追加（編集モード）
 	await page.getByText('編集モード').first().click();
