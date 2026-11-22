@@ -29,6 +29,13 @@ export const dayOf = (date, dayOffset) => {
 	return new Date(date.getFullYear(), date.getMonth(), date.getDate() + dayOffset);
 };
 
+/**
+ * date の日 (0:00～翌日 0:00) の範囲。日の区切りはここで決める
+ * @param {Date} date
+ * @returns {{start: number, end: number}} [start, end) のミリ秒
+ */
+export const dayRangeOf = date => ({start: dayOf(date, 0).getTime(), end: dayOf(date, 1).getTime()});
+
 export class TimeRecord {
 	constructor(args) {
 		this.start = Date.now();
@@ -45,10 +52,6 @@ export class TimeRecord {
 	finish() {
 		if (this.end) return;
 		this.end = Date.now();
-	}
-	/** 開始日の 24:00 */
-	get endOfStartDate() {
-		return startOfDate(new Date(this.start)).setHours(24);
 	}
 	setType(value) {
 		this.type = value;
@@ -67,17 +70,29 @@ export class TimeRecord {
 		this.start = start;
 		this.end = end;
 	}
+	/** 計測中の記録は、日付を跨いでも今まで数える */
 	get workTimeSeconds() {
-		let end = this.end;
-		if (!end) {
-			if (this.isDateOf(startOfDate())) end = Date.now();
-			else end = this.endOfStartDate;
-		}
-		// TODO: 切り捨てにしないほうが良さそう
-		return Math.floor((end - this.start) / 1000);
+		return this.secondsWithin(-Infinity, Infinity);
 	}
-	isDateOf(targetDate) {
-		return this.start >= targetDate.getTime();
+	/**
+	 * 期間 [rangeStartMs, rangeEndMs) に含まれる作業時間。日付を跨いだ記録を日ごとに分けて集計するときに使う
+	 * @param {number} rangeStartMs
+	 * @param {number} rangeEndMs
+	 */
+	secondsWithin(rangeStartMs, rangeEndMs) {
+		const start = Math.max(this.start, rangeStartMs);
+		const end = Math.min(this.end ?? Date.now(), rangeEndMs);
+		// TODO: 切り捨てにしないほうが良さそう
+		return Math.max(0, Math.floor((end - start) / 1000));
+	}
+	/**
+	 * 期間 [rangeStartMs, rangeEndMs) に開始した記録と、期間より前に開始して期間に入っても続いている記録で true
+	 * @param {number} rangeStartMs
+	 * @param {number} rangeEndMs
+	 */
+	overlaps(rangeStartMs, rangeEndMs) {
+		if (this.start >= rangeStartMs) return this.start < rangeEndMs;
+		return (this.end ?? Infinity) > rangeStartMs;
 	}
 }
 
@@ -231,21 +246,46 @@ export const addRecordsToTodoWorkTimes = (todoWorkTimes, todoIndexByKey, records
 			result[i] = {...result[i], subtotalByDate: new Map(result[i].subtotalByDate)};
 		}
 		const matched = result[i];
-		matched.total += record.workTimeSeconds;
+		// 合計は日付ごとの小計を足して、秒未満の切り捨てで小計の和とずれないようにする
+		matched.total += addToSubtotalByDate(matched.subtotalByDate, record);
 		matched.lastWorkedAt = Math.max(matched.lastWorkedAt ?? 0, record.end ?? record.start);
-		addToSubtotalByDate(matched.subtotalByDate, record);
 	}
 	return result;
 };
 
 /**
- * 記録の作業時間を、開始日の日付ごとの小計に加算する (引数の Map を変更する)
- * @param {Map<string, number>} subtotalByDate
+ * 記録の作業時間を日付ごとに分ける。日付を跨いだ記録は日の区切り (dayRangeOf) で分ける
+ * 期間を渡すと、期間に含まれる日だけを返す。長さ 0 の記録も、開始日に 0 秒で入れる
  * @param {TimeRecord} record
+ * @param {number=} rangeStartMs
+ * @param {number=} rangeEndMs
+ * @returns {[date: string, seconds: number][]} date は Formats.localeDateString
+ */
+export const splitWorkTimeByDate = (record, rangeStartMs = -Infinity, rangeEndMs = Infinity) => {
+	const end = Math.min(record.end ?? Date.now(), rangeEndMs);
+	/** @type {[date: string, seconds: number][]} */
+	const result = [];
+	let day = dayRangeOf(new Date(Math.max(record.start, rangeStartMs)));
+	do {
+		result.push([Formats.localeDateString(day.start), record.secondsWithin(day.start, day.end)]);
+		day = dayRangeOf(new Date(day.end));
+	} while (day.start < end);
+	return result;
+};
+
+/**
+ * 記録の作業時間を、日付ごとの小計に加算する (引数の Map を変更する)。日付の分け方は splitWorkTimeByDate
+ * @param {Map<string, number>} subtotalByDate キーは Formats.localeDateString
+ * @param {TimeRecord} record
+ * @returns {number} 加算した秒数
  */
 export const addToSubtotalByDate = (subtotalByDate, record) => {
-	const date = Formats.localeDateString(record.start);
-	subtotalByDate.set(date, (subtotalByDate.get(date) ?? 0) + record.workTimeSeconds);
+	let added = 0;
+	for (const [date, seconds] of splitWorkTimeByDate(record)) {
+		subtotalByDate.set(date, (subtotalByDate.get(date) ?? 0) + seconds);
+		added += seconds;
+	}
+	return added;
 };
 
 /** @typedef {{

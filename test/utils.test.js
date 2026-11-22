@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
 	startOfDate,
+	dayRangeOf,
 	monthRangeOf,
 	dayOf,
 	TimeRecord,
@@ -10,6 +11,7 @@ import {
 	todoKeyOf,
 	addRecordsToTodoWorkTimes,
 	addToSubtotalByDate,
+	splitWorkTimeByDate,
 	sumWorkTimeSecondsBy,
 	calculateRemainingTime,
 	escapeCharacterClassMetaChar,
@@ -63,6 +65,18 @@ describe('dayOf', () => {
 	});
 });
 
+describe('dayRangeOf', () => {
+	it('その日の 0:00 から翌日 0:00 まで', () => {
+		assert.deepEqual(dayRangeOf(new Date(2026, 9, 23, 12, 34)), {start: localTime(2026, 9, 23), end: localTime(2026, 9, 24)});
+	});
+
+	it('引数の Date を変更しない', () => {
+		const date = new Date(2026, 9, 23, 12, 34);
+		dayRangeOf(date);
+		assert.equal(date.getTime(), localTime(2026, 9, 23, 12, 34));
+	});
+});
+
 describe('TimeRecord', () => {
 	afterEach(() => {
 		mock.timers.reset();
@@ -91,17 +105,35 @@ describe('TimeRecord', () => {
 		assert.equal(record.workTimeSeconds, 60 * 60);
 	});
 
-	it('前日以前の計測中の記録の作業時間は開始日の 24:00 まで', () => {
+	it('前日以前に開始した計測中の記録の作業時間も現在時刻まで (日付を跨いでも続ける)', () => {
 		mock.timers.enable({apis: ['Date'], now: localTime(2026, 9, 23, 10, 0)});
 		const record = TimeRecord.load({type: '作業', start: localTime(2026, 9, 22, 23, 0)});
-		assert.equal(record.endOfStartDate, localTime(2026, 9, 23));
-		assert.equal(record.workTimeSeconds, 60 * 60);
+		assert.equal(record.workTimeSeconds, 11 * 60 * 60);
 	});
 
-	it('isDateOf は指定日以降に開始した記録で true', () => {
-		const record = TimeRecord.load({type: '作業', start: localTime(2026, 9, 23)});
-		assert.equal(record.isDateOf(new Date(2026, 9, 23)), true);
-		assert.equal(record.isDateOf(new Date(2026, 9, 24)), false);
+	it('secondsWithin は期間に含まれる分だけを数える', () => {
+		const record = TimeRecord.load({type: '作業', start: localTime(2026, 9, 22, 23, 0), end: localTime(2026, 9, 23, 1, 30)});
+		assert.equal(record.secondsWithin(localTime(2026, 9, 22), localTime(2026, 9, 23)), 60 * 60);
+		assert.equal(record.secondsWithin(localTime(2026, 9, 23), localTime(2026, 9, 24)), 90 * 60);
+		assert.equal(record.secondsWithin(localTime(2026, 9, 24), localTime(2026, 9, 25)), 0);
+		assert.equal(record.secondsWithin(localTime(2026, 9, 22), Infinity), 150 * 60);
+	});
+
+	it('secondsWithin は計測中の記録を現在時刻まで数える', () => {
+		mock.timers.enable({apis: ['Date'], now: localTime(2026, 9, 23, 2, 0)});
+		const record = TimeRecord.load({type: '作業', start: localTime(2026, 9, 22, 23, 0)});
+		assert.equal(record.secondsWithin(localTime(2026, 9, 23), localTime(2026, 9, 24)), 2 * 60 * 60);
+	});
+
+	it('overlaps は期間内に開始した記録と、期間に入っても続いている記録で true', () => {
+		const day = [localTime(2026, 9, 23), localTime(2026, 9, 24)];
+		const load = (start, end) => TimeRecord.load({type: '作業', start, end});
+		assert.equal(load(localTime(2026, 9, 23)).overlaps(...day), true, 'ちょうど 0:00 に開始');
+		assert.equal(load(localTime(2026, 9, 23), localTime(2026, 9, 23)).overlaps(...day), true, '0:00 に開始した長さ 0 の記録');
+		assert.equal(load(localTime(2026, 9, 24)).overlaps(...day), false, '翌日に開始');
+		assert.equal(load(localTime(2026, 9, 22, 23, 0), localTime(2026, 9, 23, 1, 0)).overlaps(...day), true, '前日から続いた');
+		assert.equal(load(localTime(2026, 9, 22, 23, 0)).overlaps(...day), true, '前日から計測中');
+		assert.equal(load(localTime(2026, 9, 22, 23, 0), localTime(2026, 9, 23)).overlaps(...day), false, 'ちょうど 0:00 に終了');
 	});
 });
 
@@ -159,6 +191,28 @@ describe('addToSubtotalByDate', () => {
 			[Formats.localeDateString(day2), 120],
 		]);
 	});
+
+	it('日付を跨いだ記録は 0:00 で分け、加算した秒数を返す', () => {
+		const subtotalByDate = new Map();
+		const record = TimeRecord.load({type: '作業', start: localTime(2026, 9, 22, 23, 0), end: localTime(2026, 9, 24, 0, 30)});
+		assert.equal(addToSubtotalByDate(subtotalByDate, record), (60 + 24 * 60 + 30) * 60);
+		assert.deepEqual([...subtotalByDate], [
+			[Formats.localeDateString(localTime(2026, 9, 22)), 60 * 60],
+			[Formats.localeDateString(localTime(2026, 9, 23)), 24 * 60 * 60],
+			[Formats.localeDateString(localTime(2026, 9, 24)), 30 * 60],
+		]);
+	});
+
+	it('splitWorkTimeByDate に期間を渡すと、期間に含まれる日だけを返す', () => {
+		const record = TimeRecord.load({type: '作業', start: localTime(2026, 9, 22, 23, 0), end: localTime(2026, 9, 24, 0, 30)});
+		assert.deepEqual(splitWorkTimeByDate(record, localTime(2026, 9, 23), localTime(2026, 9, 24)), [[Formats.localeDateString(localTime(2026, 9, 23)), 24 * 60 * 60]]);
+	});
+
+	it('長さ 0 の記録も開始日に 0 秒で入れる', () => {
+		const subtotalByDate = new Map();
+		addToSubtotalByDate(subtotalByDate, TimeRecord.load({type: '作業', start: localTime(2026, 9, 23, 9, 0), end: localTime(2026, 9, 23, 9, 0)}));
+		assert.deepEqual([...subtotalByDate], [[Formats.localeDateString(localTime(2026, 9, 23)), 0]]);
+	});
 });
 
 describe('sumWorkTimeSecondsBy', () => {
@@ -201,6 +255,16 @@ describe('addRecordsToTodoWorkTimes', () => {
 		const [result] = addRecordsToTodoWorkTimes(createTodoWorkTimes(), todoIndexByKey, records);
 		assert.equal(result.total, 180);
 		assert.deepEqual([...result.subtotalByDate], [[Formats.localeDateString(start), 180]]);
+	});
+
+	it('日付を跨いだ記録は日付ごとの小計に分けて加算する', () => {
+		const records = [TimeRecord.load({...todo, start: localTime(2026, 9, 22, 23, 0), end: localTime(2026, 9, 23, 1, 0)})];
+		const [result] = addRecordsToTodoWorkTimes(createTodoWorkTimes(), todoIndexByKey, records);
+		assert.equal(result.total, 2 * 60 * 60);
+		assert.deepEqual([...result.subtotalByDate], [
+			[Formats.localeDateString(localTime(2026, 9, 22)), 60 * 60],
+			[Formats.localeDateString(localTime(2026, 9, 23)), 60 * 60],
+		]);
 	});
 
 	it('最後に計測した日時を持つ', () => {

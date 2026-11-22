@@ -163,7 +163,7 @@ describe('EditTimeForm', () => {
 	const record = {start: at(0, 9) + 30e3, end: at(0, 10), type: 'MTG', title: '定例'};
 	const next = {start: at(0, 11), end: at(0, 12), type: '開発'};
 
-	test('今の時刻を出し、前後の記録と開始日の中に入力を制限する', async () => {
+	test('今の時刻を出し、前後の記録と重ならないように入力を制限する', async () => {
 		await mount({record, prev, next});
 		assert.equal(await container.locator('h3').textContent(), 'MTG(定例)');
 		assert.equal(msOf(await startInput.inputValue()), record.start);
@@ -173,15 +173,27 @@ describe('EditTimeForm', () => {
 		assert.equal(await endInput.getAttribute('required'), '');
 	});
 
-	test('前後の記録がなければ、開始日の 0:00 から今まで (開始は 24:00 の 1 秒前まで) に制限し、今日の最後の記録は計測中に戻せる', async () => {
+	// 入力欄の時刻は秒までなので、秒未満は切り捨てて比べる
+	const toSeconds = ms => Math.floor(ms / 1000) * 1000;
+
+	test('前後の記録がなければ、開始日に限らず今までに制限し、今日の最後の記録は計測中に戻せる', async () => {
 		await mount({record});
-		assert.equal(msOf(await startInput.getAttribute('min')), at(0, 0));
-		// 入力欄の時刻は秒までなので、秒未満は切り捨てて比べる
-		const toSeconds = ms => Math.floor(ms / 1000) * 1000;
-		assert.equal(msOf(await endInput.getAttribute('max')), toSeconds(Math.min(now, at(1, 0))));
-		assert.equal(msOf(await startInput.getAttribute('max')), toSeconds(Math.min(now, at(1, 0) - 1000)));
+		assert.equal(msOf(await startInput.getAttribute('min')), 0);
+		assert.equal(msOf(await endInput.getAttribute('max')), toSeconds(now));
+		assert.equal(msOf(await startInput.getAttribute('max')), toSeconds(now));
 		assert.equal(await endInput.getAttribute('required'), null);
 		assert.match(await container.textContent(), /空欄にすると計測中に戻る/);
+	});
+
+	test('前日に開始した記録も、終了を翌日 (今) まで延ばせる', async () => {
+		await mount({record: {start: at(-1, 23), end: at(-1, 23) + 30 * 60e3, type: '開発'}});
+		assert.equal(msOf(await endInput.getAttribute('max')), toSeconds(now));
+	});
+
+	test('前日に終了した最後の記録は、計測中に戻せない (その間をすべて数えてしまうため)', async () => {
+		await mount({record: {start: at(-1, 9), end: at(-1, 10), type: '開発'}});
+		assert.equal(await endInput.getAttribute('required'), '');
+		assert.doesNotMatch(await container.textContent(), /空欄にすると計測中に戻る/);
 	});
 
 	test('確定すると、変えた時刻だけを書き換えて save を呼ぶ (変えていない開始は秒も元のまま)', async () => {
@@ -218,9 +230,14 @@ describe('EditTimeForm', () => {
 		assert.equal((await calls('remove')).length, 2);
 	});
 
-	test('前日の記録が前にあっても、前を延ばす削除は出さない', async () => {
+	test('前日の記録が前にあっても、前を延ばす削除は出さない (日を跨ぐ空き時間まで埋めない)', async () => {
 		await mount({record, prev: {start: at(-1, 22), end: at(-1, 23), type: '開発'}});
 		assert.deepEqual(await container.getByRole('button').allTextContents(), ['確定', '削除']);
+	});
+
+	test('前日から今日まで続いた記録が前にあれば、前を延ばす削除を出す', async () => {
+		await mount({record, prev: {start: at(-1, 22), end: at(0, 1), type: '開発'}});
+		assert.deepEqual(await container.getByRole('button').allTextContents(), ['確定', '削除', '削除して前の記録を延ばす']);
 	});
 });
 

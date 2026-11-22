@@ -18,7 +18,7 @@ test('記録の開始・終了・編集と、分類・ToDo の追加ができる
 		'setting.use-todo-estimation': true,
 		record: [
 			{start: y + 9 * 3600e3, end: y + 10 * 3600e3, type: '開発', title: 'レビュー'},
-			{start: y + 22 * 3600e3, type: 'ミーティング'}, // 前日の終了し忘れ
+			{start: y + 22 * 3600e3, type: 'ミーティング'}, // 前日から計測中
 		],
 	});
 	await page.reload();
@@ -28,8 +28,8 @@ test('記録の開始・終了・編集と、分類・ToDo の追加ができる
 	let t = await text();
 	assert.ok(t.includes('Stats') && t.includes('履歴総数: 2'), t);
 	const storedRecords = await getRecords();
-	assert.equal(typeof storedRecords[1].end, 'number', '前日の未終了の記録が終了されていない');
-	assert.equal(storedRecords[1].end, today0.getTime(), '前日 24:00 で終了されていない');
+	// 日付を跨いでも終了せず、計測を続ける
+	assert.equal(storedRecords[1].end, undefined, '前日から計測中の記録が終了された');
 	assert.match(t, /\(-/, '期限の表示がない');
 
 	// 分類「開発」を開始 → 現在に出る
@@ -42,6 +42,7 @@ test('記録の開始・終了・編集と、分類・ToDo の追加ができる
 	assert.equal(rec.length, 3);
 	assert.equal(rec[2].type, '開発');
 	assert.equal(rec[2].end, undefined);
+	assert.equal(typeof rec[1].end, 'number', '前日から計測中だった記録が、次を開始しても終了されない');
 	// ToDo を開始 → 前のは自動で終了
 	await startButtons.nth(3).dispatchEvent('click');
 	await page.waitForTimeout(1200);
